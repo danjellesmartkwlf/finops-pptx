@@ -1,0 +1,1492 @@
+# =============================================================================
+# Arctic Wolf Corporate Template - Slide Layout Index
+# Template: pptx_template/template1.pptx
+# Total Layouts: 37 (slideLayout1 through slideLayout37)
+# Slide Dimensions: 13.33" x 7.5" (widescreen 16:9)
+# All positions/sizes in inches. Placeholder idx values are 0-based OOXML indices.
+# =============================================================================
+#
+# Common placeholders present on most layouts (omitted from individual entries):
+#   - slide_number: type=sldNum, idx=4, pos=(11.92, 7.05), size=(0.39, 0.20)
+#   - footer:       type=ftr,    idx=3, pos=(3.19, 7.12),  size=(2.87, 0.13), default_text="Public"
+#
+# Slide-to-layout mapping for the 6 sample slides in the template:
+#   slide 1 -> slideLayout1  (Title Slide A)
+#   slide 2 -> slideLayout9  (Transition Slide B)
+#   slide 3 -> slideLayout13 (Title, Body)
+#   slide 4 -> slideLayout24 (Title Only)
+#   slide 5 -> slideLayout16 (Title, Subtitle, 2 Col Box)
+#   slide 6 -> slideLayout24 (Title Only)
+# =============================================================================
+
+layouts:
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Title / Cover Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout1
+    name: "Title Slide A"
+    description: >
+      Cover slide with centered title and subtitle in the lower half.
+      Clean design with Arctic Wolf branding. No slide number or footer.
+    has_footer: false
+    has_slide_number: false
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 1.18, top: 3.71 }
+        size: { width: 8.47, height: 0.92 }
+        default_font_size: 42.0
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 1.18, top: 5.41 }
+        size: { width: 8.47, height: 0.84 }
+        default_font_size: 20.0
+
+  - id: slideLayout2
+    name: "Title Slide B"
+    description: >
+      Cover slide with larger title area. Title is taller (1.52") for
+      multi-line headings. No slide number or footer.
+    has_footer: false
+    has_slide_number: false
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.79, top: 3.21 }
+        size: { width: 9.75, height: 1.52 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.79, top: 5.09 }
+        size: { width: 9.75, height: 0.84 }
+
+  - id: slideLayout3
+    name: "Title Slide C"
+    description: >
+      Picture-based cover slide. No editable text placeholders — uses a
+      background image for the full slide. Design-only layout.
+    has_footer: false
+    has_slide_number: false
+    placeholders: []
+
+  - id: slideLayout4
+    name: "Title Slide D"
+    description: >
+      Cover slide similar to B but with narrower title/subtitle area (8.47"
+      vs 9.75"). No slide number or footer.
+    has_footer: false
+    has_slide_number: false
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.79, top: 3.21 }
+        size: { width: 8.47, height: 1.52 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.79, top: 5.09 }
+        size: { width: 8.47, height: 0.84 }
+
+  - id: slideLayout5
+    name: "Title Slide E"
+    description: >
+      Cover slide identical in placeholder layout to D. May differ in
+      background graphics or styling. No slide number or footer.
+    has_footer: false
+    has_slide_number: false
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.79, top: 3.21 }
+        size: { width: 8.47, height: 1.52 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.79, top: 5.09 }
+        size: { width: 8.47, height: 0.84 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Speaker / People Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout6
+    name: "2 Speakers"
+    description: >
+      Displays two speakers with headshot photos, names, and titles.
+      Features a rotated vertical title bar on the left edge.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: 27
+        type: body
+        label: "Rotated Vertical Title"
+        position: { left: -0.43, top: 3.54 }
+        size: { width: 3.60, height: 0.41 }
+        note: "Rotated 270 degrees; appears as vertical sidebar text"
+      - idx: 10
+        type: pic
+        label: "Speaker 1 Photo"
+        position: { left: 2.73, top: 1.42 }
+        size: { width: 2.00, height: 2.00 }
+      - idx: 23
+        type: body
+        label: "Speaker 1 Name"
+        position: { left: 5.05, top: 1.85 }
+        size: { width: 3.22, height: 0.33 }
+      - idx: 24
+        type: body
+        label: "Speaker 1 Title"
+        position: { left: 5.05, top: 2.60 }
+        size: { width: 3.22, height: 0.33 }
+      - idx: 11
+        type: pic
+        label: "Speaker 2 Photo"
+        position: { left: 2.73, top: 4.12 }
+        size: { width: 2.00, height: 2.00 }
+      - idx: 21
+        type: body
+        label: "Speaker 2 Name"
+        position: { left: 5.05, top: 4.57 }
+        size: { width: 3.22, height: 0.33 }
+      - idx: 22
+        type: body
+        label: "Speaker 2 Title"
+        position: { left: 5.05, top: 5.32 }
+        size: { width: 3.22, height: 0.33 }
+
+  - id: slideLayout7
+    name: "3 Speakers"
+    description: >
+      Displays three speakers stacked vertically, each with a headshot
+      photo, name, and title. Includes rotated vertical title bar.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: 27
+        type: body
+        label: "Rotated Vertical Title"
+        position: { left: -0.43, top: 3.54 }
+        size: { width: 3.60, height: 0.41 }
+        note: "Rotated 270 degrees; appears as vertical sidebar text"
+      - idx: 10
+        type: pic
+        label: "Speaker 1 Photo"
+        position: { left: 3.01, top: 0.78 }
+        size: { width: 1.70, height: 1.70 }
+      - idx: 12
+        type: body
+        label: "Speaker 1 Name"
+        position: { left: 5.03, top: 1.09 }
+        size: { width: 3.22, height: 0.33 }
+      - idx: 13
+        type: body
+        label: "Speaker 1 Title"
+        position: { left: 5.03, top: 1.84 }
+        size: { width: 3.22, height: 0.33 }
+      - idx: 11
+        type: pic
+        label: "Speaker 2 Photo"
+        position: { left: 3.01, top: 2.81 }
+        size: { width: 1.70, height: 1.70 }
+      - idx: 19
+        type: body
+        label: "Speaker 2 Name"
+        position: { left: 5.03, top: 3.11 }
+        size: { width: 3.22, height: 0.33 }
+      - idx: 20
+        type: body
+        label: "Speaker 2 Title"
+        position: { left: 5.03, top: 3.86 }
+        size: { width: 3.22, height: 0.33 }
+      - idx: 16
+        type: pic
+        label: "Speaker 3 Photo"
+        position: { left: 3.01, top: 4.83 }
+        size: { width: 1.70, height: 1.70 }
+      - idx: 21
+        type: body
+        label: "Speaker 3 Name"
+        position: { left: 5.03, top: 5.13 }
+        size: { width: 3.22, height: 0.33 }
+      - idx: 22
+        type: body
+        label: "Speaker 3 Title"
+        position: { left: 5.03, top: 5.89 }
+        size: { width: 3.22, height: 0.33 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Agenda
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout8
+    name: "Agenda"
+    description: >
+      Numbered agenda list with two columns — a narrow left column for
+      item numbers (01-06) and a wider right column for item descriptions.
+      Includes rotated vertical title bar.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: 27
+        type: body
+        label: "Rotated Vertical Title"
+        position: { left: -0.43, top: 3.54 }
+        size: { width: 3.60, height: 0.41 }
+        note: "Rotated 270 degrees; appears as vertical sidebar text"
+      - idx: 19
+        type: body
+        label: "Item Numbers"
+        position: { left: 2.71, top: 1.86 }
+        size: { width: 0.81, height: 3.97 }
+        note: "Narrow column for numbers like 01, 02, 03, etc."
+      - idx: 20
+        type: body
+        label: "Item Descriptions"
+        position: { left: 3.89, top: 1.84 }
+        size: { width: 5.64, height: 3.97 }
+        note: "Wider column for agenda item text"
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Transition / Section Divider Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout9
+    name: "Transition Slide B"
+    description: >
+      Section divider slide with a large title in the lower-right area.
+      Used to mark major sections of a presentation.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Transition Title"
+        position: { left: 1.42, top: 3.50 }
+        size: { width: 6.70, height: 2.19 }
+
+  - id: slideLayout10
+    name: "Transition Slide A"
+    description: >
+      Section divider with a large title area positioned more toward the
+      center-left of the slide. Taller title area than variant B.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Transition Title"
+        position: { left: 1.54, top: 2.46 }
+        size: { width: 5.85, height: 2.84 }
+
+  - id: slideLayout11
+    name: "Transition Slide C"
+    description: >
+      Section divider similar to variant B in position and sizing.
+      May differ in background styling or graphic treatment.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Transition Title"
+        position: { left: 1.42, top: 3.50 }
+        size: { width: 6.70, height: 2.19 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Standard Content Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout12
+    name: "Title, Subtitle, Body"
+    description: >
+      Standard content slide with a top title bar, subtitle line, and a
+      full-width body area for bullet points or paragraphs.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Body Content"
+        position: { left: 0.53, top: 2.04 }
+        size: { width: 12.33, height: 4.45 }
+
+  - id: slideLayout13
+    name: "Title, Body"
+    description: >
+      Simple content slide with title and a large body area. No subtitle
+      line — body starts closer to the title.
+    has_footer: false
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 11
+        type: body
+        label: "Body Content"
+        position: { left: 0.53, top: 1.54 }
+        size: { width: 12.33, height: 5.18 }
+
+  - id: slideLayout14
+    name: "Title, Subtitle"
+    description: >
+      Title and subtitle only — no body content area. Useful for
+      statement slides or minimal content.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Multi-Column Content Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout15
+    name: "Title, Subtitle, 2 Col"
+    description: >
+      Two equal-width columns below title and subtitle. Columns span
+      the full content area side by side.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Left Column"
+        position: { left: 0.53, top: 2.10 }
+        size: { width: 5.96, height: 4.45 }
+      - idx: 12
+        type: body
+        label: "Right Column"
+        position: { left: 6.90, top: 2.10 }
+        size: { width: 5.96, height: 4.45 }
+
+  - id: slideLayout16
+    name: "Title, Subtitle, 2 Col Box"
+    description: >
+      Two columns with box/card styling. Columns are slightly inset from
+      the edges with visible boundary treatment.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Left Column (Box)"
+        position: { left: 0.86, top: 2.52 }
+        size: { width: 5.30, height: 3.70 }
+      - idx: 12
+        type: body
+        label: "Right Column (Box)"
+        position: { left: 7.29, top: 2.52 }
+        size: { width: 5.19, height: 3.70 }
+
+  - id: slideLayout17
+    name: "Title, Subtitle, 3 Col"
+    description: >
+      Three equal-width columns below title and subtitle.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Column 1"
+        position: { left: 0.53, top: 2.10 }
+        size: { width: 3.83, height: 4.45 }
+      - idx: 12
+        type: body
+        label: "Column 2"
+        position: { left: 4.74, top: 2.10 }
+        size: { width: 3.83, height: 4.45 }
+      - idx: 13
+        type: body
+        label: "Column 3"
+        position: { left: 8.95, top: 2.10 }
+        size: { width: 3.87, height: 4.45 }
+
+  - id: slideLayout18
+    name: "Title, Subtitle, 3 Col/2 Row"
+    description: >
+      3x2 grid (6 cells) below title and subtitle. Two rows of three
+      equal-width columns for comparison or matrix content.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Row 1, Col 1"
+        position: { left: 0.53, top: 2.10 }
+        size: { width: 3.83, height: 2.14 }
+      - idx: 12
+        type: body
+        label: "Row 1, Col 2"
+        position: { left: 4.74, top: 2.10 }
+        size: { width: 3.83, height: 2.14 }
+      - idx: 13
+        type: body
+        label: "Row 1, Col 3"
+        position: { left: 8.95, top: 2.10 }
+        size: { width: 3.87, height: 2.14 }
+      - idx: 14
+        type: body
+        label: "Row 2, Col 1"
+        position: { left: 0.53, top: 4.51 }
+        size: { width: 3.83, height: 2.14 }
+      - idx: 15
+        type: body
+        label: "Row 2, Col 2"
+        position: { left: 4.74, top: 4.51 }
+        size: { width: 3.83, height: 2.14 }
+      - idx: 16
+        type: body
+        label: "Row 2, Col 3"
+        position: { left: 8.95, top: 4.51 }
+        size: { width: 3.87, height: 2.14 }
+
+  - id: slideLayout19
+    name: "Title, Subtitle, 4 Col"
+    description: >
+      Four equal-width columns below title and subtitle.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Column 1"
+        position: { left: 0.53, top: 2.10 }
+        size: { width: 2.80, height: 4.45 }
+      - idx: 12
+        type: body
+        label: "Column 2"
+        position: { left: 3.69, top: 2.10 }
+        size: { width: 2.80, height: 4.45 }
+      - idx: 13
+        type: body
+        label: "Column 3"
+        position: { left: 6.84, top: 2.10 }
+        size: { width: 2.80, height: 4.45 }
+      - idx: 14
+        type: body
+        label: "Column 4"
+        position: { left: 10.00, top: 2.10 }
+        size: { width: 2.80, height: 4.45 }
+
+  - id: slideLayout20
+    name: "Title, Subtitle, 4 Col/2 Row"
+    description: >
+      4x2 grid (8 cells) below title and subtitle. Two rows of four
+      columns for dense comparison content.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Row 1, Col 1"
+        position: { left: 0.53, top: 2.10 }
+        size: { width: 2.80, height: 2.14 }
+      - idx: 12
+        type: body
+        label: "Row 1, Col 2"
+        position: { left: 3.69, top: 2.10 }
+        size: { width: 2.80, height: 2.14 }
+      - idx: 13
+        type: body
+        label: "Row 1, Col 3"
+        position: { left: 6.84, top: 2.10 }
+        size: { width: 2.80, height: 2.14 }
+      - idx: 14
+        type: body
+        label: "Row 1, Col 4"
+        position: { left: 10.00, top: 2.10 }
+        size: { width: 2.80, height: 2.14 }
+      - idx: 17
+        type: body
+        label: "Row 2, Col 1"
+        position: { left: 0.53, top: 4.51 }
+        size: { width: 2.80, height: 2.14 }
+      - idx: 18
+        type: body
+        label: "Row 2, Col 2"
+        position: { left: 3.69, top: 4.51 }
+        size: { width: 2.80, height: 2.14 }
+      - idx: 19
+        type: body
+        label: "Row 2, Col 3"
+        position: { left: 6.84, top: 4.51 }
+        size: { width: 2.80, height: 2.14 }
+      - idx: 20
+        type: body
+        label: "Row 2, Col 4"
+        position: { left: 10.00, top: 4.51 }
+        size: { width: 2.80, height: 2.14 }
+
+  - id: slideLayout21
+    name: "Title, Subtitle, 5 Col"
+    description: >
+      Five equal-width columns below title and subtitle.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Column 1"
+        position: { left: 0.53, top: 2.10 }
+        size: { width: 2.21, height: 4.45 }
+      - idx: 12
+        type: body
+        label: "Column 2"
+        position: { left: 3.05, top: 2.10 }
+        size: { width: 2.21, height: 4.45 }
+      - idx: 13
+        type: body
+        label: "Column 3"
+        position: { left: 5.56, top: 2.10 }
+        size: { width: 2.21, height: 4.45 }
+      - idx: 15
+        type: body
+        label: "Column 4"
+        position: { left: 8.08, top: 2.10 }
+        size: { width: 2.21, height: 4.45 }
+      - idx: 14
+        type: body
+        label: "Column 5"
+        position: { left: 10.59, top: 2.10 }
+        size: { width: 2.21, height: 4.45 }
+
+  - id: slideLayout22
+    name: "Title, Subtitle, 5 Col/2 Row"
+    description: >
+      5x2 grid (10 cells) below title and subtitle. Densest grid layout
+      available in this template.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Row 1, Col 1"
+        position: { left: 0.53, top: 2.10 }
+        size: { width: 2.21, height: 2.05 }
+      - idx: 12
+        type: body
+        label: "Row 1, Col 2"
+        position: { left: 3.05, top: 2.10 }
+        size: { width: 2.21, height: 2.05 }
+      - idx: 13
+        type: body
+        label: "Row 1, Col 3"
+        position: { left: 5.56, top: 2.10 }
+        size: { width: 2.21, height: 2.05 }
+      - idx: 15
+        type: body
+        label: "Row 1, Col 4"
+        position: { left: 8.08, top: 2.10 }
+        size: { width: 2.21, height: 2.05 }
+      - idx: 14
+        type: body
+        label: "Row 1, Col 5"
+        position: { left: 10.59, top: 2.10 }
+        size: { width: 2.21, height: 2.05 }
+      - idx: 16
+        type: body
+        label: "Row 2, Col 1"
+        position: { left: 0.53, top: 4.48 }
+        size: { width: 2.21, height: 2.05 }
+      - idx: 17
+        type: body
+        label: "Row 2, Col 2"
+        position: { left: 3.05, top: 4.48 }
+        size: { width: 2.21, height: 2.05 }
+      - idx: 18
+        type: body
+        label: "Row 2, Col 3"
+        position: { left: 5.56, top: 4.48 }
+        size: { width: 2.21, height: 2.05 }
+      - idx: 20
+        type: body
+        label: "Row 2, Col 4"
+        position: { left: 8.08, top: 4.48 }
+        size: { width: 2.21, height: 2.05 }
+      - idx: 19
+        type: body
+        label: "Row 2, Col 5"
+        position: { left: 10.59, top: 4.48 }
+        size: { width: 2.21, height: 2.05 }
+
+  - id: slideLayout23
+    name: "Title, Subtitle, 2 Col/2 Row"
+    description: >
+      2x2 grid (4 cells) below title and subtitle. Good for quadrant
+      comparisons or four related topics.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 12.33, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Row 1, Col 1"
+        position: { left: 0.53, top: 2.10 }
+        size: { width: 5.96, height: 2.01 }
+      - idx: 12
+        type: body
+        label: "Row 1, Col 2"
+        position: { left: 6.86, top: 2.10 }
+        size: { width: 5.96, height: 2.01 }
+      - idx: 13
+        type: body
+        label: "Row 2, Col 1"
+        position: { left: 0.53, top: 4.51 }
+        size: { width: 5.96, height: 2.01 }
+      - idx: 14
+        type: body
+        label: "Row 2, Col 2"
+        position: { left: 6.86, top: 4.51 }
+        size: { width: 5.96, height: 2.01 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Minimal / Utility Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout24
+    name: "Title Only"
+    description: >
+      Slide with only a title placeholder. The rest of the slide is open
+      for freeform content (charts, images, diagrams inserted manually).
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+
+  - id: slideLayout25
+    name: "Blank"
+    description: >
+      Completely blank slide with no content placeholders. Only contains
+      the standard slide number and footer.
+    has_footer: true
+    has_slide_number: true
+    placeholders: []
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Photo + Content Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout26
+    name: "Title, Subtitle, Body, Photo A"
+    description: >
+      Left-aligned photo with heading, subtitle, and body text on the
+      right. Photo is flush to the left edge of the slide.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: 12
+        type: pic
+        label: "Photo"
+        position: { left: 0.00, top: 1.22 }
+        size: { width: 3.61, height: 5.10 }
+      - idx: 16
+        type: body
+        label: "Heading"
+        position: { left: 4.17, top: 1.91 }
+        size: { width: 8.63, height: 0.68 }
+      - idx: 15
+        type: body
+        label: "Subtitle"
+        position: { left: 4.17, top: 2.74 }
+        size: { width: 8.63, height: 0.24 }
+      - idx: 13
+        type: body
+        label: "Body Text"
+        position: { left: 4.17, top: 3.34 }
+        size: { width: 8.63, height: 2.98 }
+
+  - id: slideLayout27
+    name: "Title, Subtitle, Body, Photo B"
+    description: >
+      Similar to Photo A but with an inset photo (has left margin) and
+      narrower heading/subtitle area. Body text area is shorter.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: 18
+        type: pic
+        label: "Photo"
+        position: { left: 0.53, top: 1.12 }
+        size: { width: 3.08, height: 4.42 }
+      - idx: 16
+        type: body
+        label: "Heading"
+        position: { left: 4.17, top: 1.91 }
+        size: { width: 4.21, height: 0.60 }
+      - idx: 15
+        type: body
+        label: "Subtitle"
+        position: { left: 4.17, top: 2.82 }
+        size: { width: 4.21, height: 0.33 }
+      - idx: 13
+        type: body
+        label: "Body Text"
+        position: { left: 4.17, top: 3.45 }
+        size: { width: 8.63, height: 1.79 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Org Chart / Team Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout28
+    name: "Chart A"
+    description: >
+      Large org chart layout with a central leader headshot at top and
+      four direct report groups below, each with up to 3 team members.
+      Total capacity: 1 leader + 4 direct reports + 12 team members.
+      Extremely placeholder-heavy layout.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      # Leader (top center)
+      - idx: 10
+        type: pic
+        label: "Leader Photo"
+        position: { left: 6.25, top: 1.70 }
+        size: { width: 0.85, height: 0.85 }
+      - idx: 35
+        type: body
+        label: "Leader Name"
+        position: { left: 7.21, top: 1.84 }
+        size: { width: 2.92, height: 0.29 }
+      - idx: 36
+        type: body
+        label: "Leader Title"
+        position: { left: 7.21, top: 2.21 }
+        size: { width: 2.92, height: 0.20 }
+      # Title
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.50, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      # 4 Direct Reports (row of headshots with names)
+      - idx: 16
+        type: pic
+        label: "Direct Report 1 Photo"
+        position: { left: 1.16, top: 3.25 }
+        size: { width: 0.68, height: 0.68 }
+      - idx: 39
+        type: body
+        label: "Direct Report 1 Name"
+        position: { left: 0.53, top: 4.04 }
+        size: { width: 1.96, height: 0.22 }
+      - idx: 40
+        type: body
+        label: "Direct Report 1 Title"
+        position: { left: 0.53, top: 4.29 }
+        size: { width: 1.96, height: 0.18 }
+      - idx: 11
+        type: pic
+        label: "Direct Report 2 Photo"
+        position: { left: 4.59, top: 3.25 }
+        size: { width: 0.68, height: 0.68 }
+      - idx: 41
+        type: body
+        label: "Direct Report 2 Name"
+        position: { left: 3.95, top: 4.04 }
+        size: { width: 1.96, height: 0.22 }
+      - idx: 42
+        type: body
+        label: "Direct Report 2 Title"
+        position: { left: 3.95, top: 4.29 }
+        size: { width: 1.96, height: 0.18 }
+      - idx: 12
+        type: pic
+        label: "Direct Report 3 Photo"
+        position: { left: 8.07, top: 3.25 }
+        size: { width: 0.68, height: 0.68 }
+      - idx: 43
+        type: body
+        label: "Direct Report 3 Name"
+        position: { left: 7.43, top: 4.04 }
+        size: { width: 1.96, height: 0.22 }
+      - idx: 44
+        type: body
+        label: "Direct Report 3 Title"
+        position: { left: 7.43, top: 4.29 }
+        size: { width: 1.96, height: 0.18 }
+      - idx: 13
+        type: pic
+        label: "Direct Report 4 Photo"
+        position: { left: 11.47, top: 3.25 }
+        size: { width: 0.68, height: 0.68 }
+      - idx: 45
+        type: body
+        label: "Direct Report 4 Name"
+        position: { left: 10.83, top: 4.04 }
+        size: { width: 1.96, height: 0.22 }
+      - idx: 46
+        type: body
+        label: "Direct Report 4 Title"
+        position: { left: 10.83, top: 4.29 }
+        size: { width: 1.96, height: 0.18 }
+      # Team members under each direct report (3 per group, 4 groups)
+      # Group 1 team members
+      - idx: 29
+        type: pic
+        label: "Group 1, Member 1 Photo"
+        position: { left: 0.61, top: 4.63 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 119
+        type: body
+        label: "Group 1, Member 1 Name"
+        position: { left: 1.18, top: 4.70 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 120
+        type: body
+        label: "Group 1, Member 1 Title"
+        position: { left: 1.18, top: 4.91 }
+        size: { width: 1.36, height: 0.13 }
+      - idx: 30
+        type: pic
+        label: "Group 1, Member 2 Photo"
+        position: { left: 0.61, top: 5.30 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 121
+        type: body
+        label: "Group 1, Member 2 Name"
+        position: { left: 1.18, top: 5.38 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 122
+        type: body
+        label: "Group 1, Member 2 Title"
+        position: { left: 1.18, top: 5.59 }
+        size: { width: 1.36, height: 0.13 }
+      - idx: 87
+        type: pic
+        label: "Group 1, Member 3 Photo"
+        position: { left: 0.61, top: 5.96 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 123
+        type: body
+        label: "Group 1, Member 3 Name"
+        position: { left: 1.18, top: 6.05 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 124
+        type: body
+        label: "Group 1, Member 3 Title"
+        position: { left: 1.18, top: 6.25 }
+        size: { width: 1.36, height: 0.13 }
+      # Group 2 team members
+      - idx: 129
+        type: pic
+        label: "Group 2, Member 1 Photo"
+        position: { left: 4.02, top: 4.63 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 131
+        type: body
+        label: "Group 2, Member 1 Name"
+        position: { left: 4.60, top: 4.70 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 132
+        type: body
+        label: "Group 2, Member 1 Title"
+        position: { left: 4.60, top: 4.91 }
+        size: { width: 1.36, height: 0.13 }
+      - idx: 130
+        type: pic
+        label: "Group 2, Member 2 Photo"
+        position: { left: 4.02, top: 5.30 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 133
+        type: body
+        label: "Group 2, Member 2 Name"
+        position: { left: 4.60, top: 5.38 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 134
+        type: body
+        label: "Group 2, Member 2 Title"
+        position: { left: 4.60, top: 5.59 }
+        size: { width: 1.36, height: 0.13 }
+      - idx: 136
+        type: pic
+        label: "Group 2, Member 3 Photo"
+        position: { left: 4.02, top: 5.96 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 137
+        type: body
+        label: "Group 2, Member 3 Name"
+        position: { left: 4.60, top: 6.05 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 138
+        type: body
+        label: "Group 2, Member 3 Title"
+        position: { left: 4.60, top: 6.25 }
+        size: { width: 1.36, height: 0.13 }
+      # Group 3 team members
+      - idx: 127
+        type: pic
+        label: "Group 3, Member 1 Photo"
+        position: { left: 7.51, top: 4.63 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 143
+        type: body
+        label: "Group 3, Member 1 Name"
+        position: { left: 8.08, top: 4.70 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 144
+        type: body
+        label: "Group 3, Member 1 Title"
+        position: { left: 8.08, top: 4.91 }
+        size: { width: 1.36, height: 0.13 }
+      - idx: 128
+        type: pic
+        label: "Group 3, Member 2 Photo"
+        position: { left: 7.51, top: 5.30 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 145
+        type: body
+        label: "Group 3, Member 2 Name"
+        position: { left: 8.08, top: 5.38 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 146
+        type: body
+        label: "Group 3, Member 2 Title"
+        position: { left: 8.08, top: 5.59 }
+        size: { width: 1.36, height: 0.13 }
+      - idx: 135
+        type: pic
+        label: "Group 3, Member 3 Photo"
+        position: { left: 7.51, top: 5.96 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 147
+        type: body
+        label: "Group 3, Member 3 Name"
+        position: { left: 8.08, top: 6.05 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 148
+        type: body
+        label: "Group 3, Member 3 Title"
+        position: { left: 8.08, top: 6.25 }
+        size: { width: 1.36, height: 0.13 }
+      # Group 4 team members
+      - idx: 153
+        type: pic
+        label: "Group 4, Member 1 Photo"
+        position: { left: 10.91, top: 4.63 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 155
+        type: body
+        label: "Group 4, Member 1 Name"
+        position: { left: 11.49, top: 4.70 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 156
+        type: body
+        label: "Group 4, Member 1 Title"
+        position: { left: 11.49, top: 4.91 }
+        size: { width: 1.36, height: 0.13 }
+      - idx: 154
+        type: pic
+        label: "Group 4, Member 2 Photo"
+        position: { left: 10.91, top: 5.30 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 157
+        type: body
+        label: "Group 4, Member 2 Name"
+        position: { left: 11.49, top: 5.38 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 158
+        type: body
+        label: "Group 4, Member 2 Title"
+        position: { left: 11.49, top: 5.59 }
+        size: { width: 1.36, height: 0.13 }
+      - idx: 160
+        type: pic
+        label: "Group 4, Member 3 Photo"
+        position: { left: 10.91, top: 5.96 }
+        size: { width: 0.48, height: 0.48 }
+      - idx: 161
+        type: body
+        label: "Group 4, Member 3 Name"
+        position: { left: 11.49, top: 6.05 }
+        size: { width: 1.36, height: 0.18 }
+      - idx: 162
+        type: body
+        label: "Group 4, Member 3 Title"
+        position: { left: 11.49, top: 6.25 }
+        size: { width: 1.36, height: 0.13 }
+
+  - id: slideLayout29
+    name: "Chart B"
+    description: >
+      Simpler org chart with a central leader and 4 direct reports
+      listed vertically on the right. No sub-team members.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.50, top: 0.60 }
+        size: { width: 12.33, height: 0.66 }
+      # Leader
+      - idx: 10
+        type: pic
+        label: "Leader Photo"
+        position: { left: 4.24, top: 3.40 }
+        size: { width: 1.22, height: 1.22 }
+      - idx: 43
+        type: body
+        label: "Leader Name"
+        position: { left: 1.34, top: 3.71 }
+        size: { width: 2.66, height: 0.29 }
+      - idx: 44
+        type: body
+        label: "Leader Title"
+        position: { left: 1.34, top: 4.08 }
+        size: { width: 2.66, height: 0.20 }
+      # Direct Reports (stacked vertically on right)
+      - idx: 12
+        type: pic
+        label: "Report 1 Photo"
+        position: { left: 7.08, top: 1.89 }
+        size: { width: 0.90, height: 0.90 }
+      - idx: 35
+        type: body
+        label: "Report 1 Name"
+        position: { left: 8.23, top: 2.03 }
+        size: { width: 2.92, height: 0.29 }
+      - idx: 36
+        type: body
+        label: "Report 1 Title"
+        position: { left: 8.23, top: 2.39 }
+        size: { width: 2.92, height: 0.20 }
+      - idx: 11
+        type: pic
+        label: "Report 2 Photo"
+        position: { left: 7.08, top: 3.03 }
+        size: { width: 0.90, height: 0.90 }
+      - idx: 37
+        type: body
+        label: "Report 2 Name"
+        position: { left: 8.23, top: 3.16 }
+        size: { width: 2.92, height: 0.29 }
+      - idx: 38
+        type: body
+        label: "Report 2 Title"
+        position: { left: 8.23, top: 3.53 }
+        size: { width: 2.92, height: 0.20 }
+      - idx: 16
+        type: pic
+        label: "Report 3 Photo"
+        position: { left: 7.08, top: 4.18 }
+        size: { width: 0.90, height: 0.90 }
+      - idx: 39
+        type: body
+        label: "Report 3 Name"
+        position: { left: 8.23, top: 4.32 }
+        size: { width: 2.92, height: 0.29 }
+      - idx: 40
+        type: body
+        label: "Report 3 Title"
+        position: { left: 8.23, top: 4.68 }
+        size: { width: 2.92, height: 0.20 }
+      - idx: 15
+        type: pic
+        label: "Report 4 Photo"
+        position: { left: 7.08, top: 5.32 }
+        size: { width: 0.90, height: 0.90 }
+      - idx: 41
+        type: body
+        label: "Report 4 Name"
+        position: { left: 8.23, top: 5.46 }
+        size: { width: 2.92, height: 0.29 }
+      - idx: 42
+        type: body
+        label: "Report 4 Title"
+        position: { left: 8.23, top: 5.82 }
+        size: { width: 2.92, height: 0.20 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Icon + Content Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout30
+    name: "Title, Body, 4-icon Dark"
+    description: >
+      Dark-background slide with left-side title and body text, plus a
+      2x2 grid of icon placeholders on the right, each with a description.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 1.08, top: 1.93 }
+        size: { width: 3.97, height: 1.14 }
+      - idx: 39
+        type: body
+        label: "Body Text"
+        position: { left: 1.08, top: 3.29 }
+        size: { width: 3.97, height: 1.59 }
+      # Top-left icon + description
+      - idx: 44
+        type: body
+        label: "Icon 1 (top-left)"
+        position: { left: 6.49, top: 1.39 }
+        size: { width: 0.89, height: 0.89 }
+        note: "Icon/image content area"
+      - idx: 37
+        type: body
+        label: "Icon 1 Description"
+        position: { left: 6.49, top: 2.57 }
+        size: { width: 2.65, height: 0.82 }
+      # Top-right icon + description
+      - idx: 46
+        type: body
+        label: "Icon 2 (top-right)"
+        position: { left: 10.16, top: 1.39 }
+        size: { width: 0.89, height: 0.89 }
+        note: "Icon/image content area"
+      - idx: 38
+        type: body
+        label: "Icon 2 Description"
+        position: { left: 10.16, top: 2.57 }
+        size: { width: 2.65, height: 0.82 }
+      # Bottom-left icon + description
+      - idx: 45
+        type: body
+        label: "Icon 3 (bottom-left)"
+        position: { left: 6.49, top: 4.11 }
+        size: { width: 0.89, height: 0.89 }
+        note: "Icon/image content area"
+      - idx: 35
+        type: body
+        label: "Icon 3 Description"
+        position: { left: 6.49, top: 5.28 }
+        size: { width: 2.65, height: 0.82 }
+      # Bottom-right icon + description
+      - idx: 47
+        type: body
+        label: "Icon 4 (bottom-right)"
+        position: { left: 10.16, top: 4.11 }
+        size: { width: 0.89, height: 0.89 }
+        note: "Icon/image content area"
+      - idx: 36
+        type: body
+        label: "Icon 4 Description"
+        position: { left: 10.16, top: 5.28 }
+        size: { width: 2.65, height: 0.82 }
+
+  - id: slideLayout31
+    name: "Title, Body, 4-icon Centered Dark"
+    description: >
+      Dark-background slide with centered title and subtitle at top,
+      four icon image placeholders in a row, and a description below each.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 2.57, top: 1.34 }
+        size: { width: 8.20, height: 0.73 }
+      - idx: 19
+        type: body
+        label: "Subtitle / Body Text"
+        position: { left: 2.57, top: 2.13 }
+        size: { width: 8.20, height: 0.62 }
+      - idx: 10
+        type: pic
+        label: "Icon 1 Image"
+        position: { left: 2.00, top: 3.75 }
+        size: { width: 0.81, height: 0.89 }
+      - idx: 15
+        type: body
+        label: "Icon 1 Description"
+        position: { left: 1.08, top: 4.92 }
+        size: { width: 2.65, height: 0.82 }
+      - idx: 11
+        type: pic
+        label: "Icon 2 Image"
+        position: { left: 4.85, top: 3.75 }
+        size: { width: 0.81, height: 0.89 }
+      - idx: 16
+        type: body
+        label: "Icon 2 Description"
+        position: { left: 3.93, top: 4.92 }
+        size: { width: 2.65, height: 0.82 }
+      - idx: 13
+        type: pic
+        label: "Icon 3 Image"
+        position: { left: 7.69, top: 3.75 }
+        size: { width: 0.81, height: 0.89 }
+      - idx: 17
+        type: body
+        label: "Icon 3 Description"
+        position: { left: 6.77, top: 4.92 }
+        size: { width: 2.65, height: 0.82 }
+      - idx: 14
+        type: pic
+        label: "Icon 4 Image"
+        position: { left: 10.54, top: 3.75 }
+        size: { width: 0.81, height: 0.89 }
+      - idx: 18
+        type: body
+        label: "Icon 4 Description"
+        position: { left: 9.62, top: 4.92 }
+        size: { width: 2.65, height: 0.82 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Centered / Statement Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout32
+    name: "Centered Title, Subtitle"
+    description: >
+      Centered title and body text in the middle of the slide. Good for
+      key statement or emphasis slides.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Centered Title"
+        position: { left: 2.35, top: 2.67 }
+        size: { width: 8.64, height: 0.73 }
+      - idx: 12
+        type: body
+        label: "Subtitle / Description"
+        position: { left: 2.35, top: 3.47 }
+        size: { width: 8.64, height: 1.12 }
+
+  - id: slideLayout33
+    name: "Centered Title, Subtitle, 2-col Body"
+    description: >
+      Centered title and subtitle at top with two body content columns
+      below. Combines statement-style header with detailed content.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Centered Title"
+        position: { left: 3.38, top: 1.34 }
+        size: { width: 6.58, height: 0.73 }
+      - idx: 12
+        type: body
+        label: "Subtitle / Description"
+        position: { left: 3.38, top: 2.13 }
+        size: { width: 6.58, height: 1.12 }
+      - idx: 31
+        type: body
+        label: "Left Column"
+        position: { left: 0.53, top: 3.63 }
+        size: { width: 5.83, height: 2.85 }
+      - idx: 32
+        type: body
+        label: "Right Column"
+        position: { left: 6.98, top: 3.63 }
+        size: { width: 5.83, height: 2.85 }
+
+  - id: slideLayout34
+    name: "Centered Title, Subtitle with BG Texture"
+    description: >
+      Same as Centered Title, Subtitle (layout 32) but with a background
+      texture or pattern. Positioned higher on the slide.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Centered Title"
+        position: { left: 2.35, top: 1.34 }
+        size: { width: 8.64, height: 0.73 }
+      - idx: 12
+        type: body
+        label: "Subtitle / Description"
+        position: { left: 2.35, top: 2.13 }
+        size: { width: 8.64, height: 1.12 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Box / Framed Content Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout35
+    name: "Title, Subtitle, Body in Box"
+    description: >
+      Title and subtitle at top with body content inside a visible
+      box/frame. Title area is narrower (4.49") than full-width.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 4.49, height: 0.62 }
+      - idx: 10
+        type: body
+        label: "Subtitle"
+        position: { left: 0.53, top: 1.34 }
+        size: { width: 11.70, height: 0.46 }
+      - idx: 11
+        type: body
+        label: "Body Content (in box)"
+        position: { left: 0.94, top: 2.04 }
+        size: { width: 11.50, height: 4.31 }
+
+  - id: slideLayout36
+    name: "Title, Body in Box"
+    description: >
+      Title at top with body content in a box/frame. No subtitle —
+      body starts closer to the title.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Slide Title"
+        position: { left: 0.53, top: 0.60 }
+        size: { width: 5.90, height: 0.62 }
+      - idx: 11
+        type: body
+        label: "Body Content (in box)"
+        position: { left: 0.94, top: 1.56 }
+        size: { width: 11.50, height: 4.79 }
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY: Quote Slides
+  # ---------------------------------------------------------------------------
+
+  - id: slideLayout37
+    name: "Pull Quote A"
+    description: >
+      Large quote/statement slide. The title placeholder holds the quote
+      text (large area) and a body placeholder below for attribution.
+    has_footer: true
+    has_slide_number: true
+    placeholders:
+      - idx: null
+        type: title
+        label: "Quote Text"
+        position: { left: 1.58, top: 2.50 }
+        size: { width: 7.93, height: 2.41 }
+      - idx: 14
+        type: body
+        label: "Attribution"
+        position: { left: 1.58, top: 5.28 }
+        size: { width: 7.93, height: 0.66 }

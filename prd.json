@@ -1,0 +1,156 @@
+{
+  "project": "FinOps Report Generator - Phase 1",
+  "version": "1.0",
+  "tickets": [
+    {
+      "id": "T-001",
+      "milestone": "M1: Foundation",
+      "title": "Create config.yaml with bucket definitions and template strings",
+      "description": "Define the YAML configuration file that drives the system. Must include: bucket definitions (Total, COGS, OpEx) with name, SQL logic/tag filter, and forecast mapping key; narrative f-string templates for Mode A (with forecast) and Mode B (MoM only); PowerPoint slide-to-metric mappings (slide IDs and shape placeholder IDs).",
+      "status": "done",
+      "prd_sections": ["3.1", "2.1"]
+    },
+    {
+      "id": "T-002",
+      "milestone": "M1: Foundation",
+      "title": "Create .env.example and environment variable setup",
+      "description": "Create .env.example with all required Redshift connection variables (REDSHIFT_HOST, REDSHIFT_PORT, REDSHIFT_DATABASE, REDSHIFT_USER, REDSHIFT_PASSWORD, REDSHIFT_SCHEMA). Add .env to .gitignore. Wire up env loading in the application.",
+      "status": "done",
+      "prd_sections": ["3.1"]
+    },
+    {
+      "id": "T-003",
+      "milestone": "M1: Foundation",
+      "title": "Build Redshift ingestion module",
+      "description": "Implement src/ingestion.py Redshift portion. Connect using psycopg2 or redshift_connector. Query CUR tables (daily_cur_summary, cylance_daily_cur_summary, dbx_cur) aggregating cost by month and cost category per bucket definitions in config.yaml. Apply common filters from DATA.md (exclude Credits, Databricks services, Tackle). Handle Databricks COGS attribution logic for Arctic Wolf.",
+      "status": "done",
+      "prd_sections": ["3.2"],
+      "depends_on": ["T-001", "T-002"]
+    },
+    {
+      "id": "T-004",
+      "milestone": "M1: Foundation",
+      "title": "Build Excel forecast ingestion module",
+      "description": "Implement src/ingestion.py Excel portion. Read forecast file and map rows to buckets using forecast mapping keys from config.yaml. Validate that all expected forecast keys exist; raise clear error if a mapping key is missing. Return forecast values keyed by bucket name and month.",
+      "status": "done",
+      "prd_sections": ["3.2"],
+      "depends_on": ["T-001"]
+    },
+    {
+      "id": "T-005",
+      "milestone": "M1: Foundation",
+      "title": "Install core dependencies",
+      "description": "Add required packages via uv: psycopg2-binary or redshift_connector, openpyxl (Excel reading), pyyaml, python-dotenv. Verify uv sync works cleanly.",
+      "status": "done",
+      "prd_sections": ["4.1"]
+    },
+    {
+      "id": "T-006",
+      "milestone": "M2: Logic & Text",
+      "title": "Build MoM and Forecast Variance calculation engine",
+      "description": "Implement the calculation logic that takes current month actuals, previous month actuals, and optional forecast values per bucket. Compute: MoM delta ($), MoM percentage, MoM direction (increase/decrease). When forecast exists: variance delta ($), variance percentage, variance direction (over/under). Return a structured result per bucket that the narrative builder can consume.",
+      "status": "done",
+      "prd_sections": ["2.2", "3.3"],
+      "depends_on": ["T-003", "T-004"]
+    },
+    {
+      "id": "T-007",
+      "milestone": "M2: Logic & Text",
+      "title": "Build narrative template engine",
+      "description": "Implement src/narrative.py. Read template strings from config.yaml. For each bucket, select Mode A or Mode B based on whether forecast data exists. Fill template placeholders: Metric, Month, Actual, MoM_Dir, MoM_Pct, Forecast, Var_Dir, Var_Pct. Return generated narrative text per bucket.",
+      "status": "done",
+      "prd_sections": ["3.3"],
+      "depends_on": ["T-001", "T-006"]
+    },
+    {
+      "id": "T-008",
+      "milestone": "M3: The Cockpit",
+      "title": "Build Streamlit UI shell with report generation trigger",
+      "description": "Implement app.py as the Streamlit entry point. Add month selector input. Add 'Generate Report' button that triggers the full pipeline: ingest actuals + forecast, run calculations, generate narratives. Display results in the UI.",
+      "status": "done",
+      "prd_sections": ["2.2", "2.3"],
+      "depends_on": ["T-005", "T-007"]
+    },
+    {
+      "id": "T-009",
+      "milestone": "M3: The Cockpit",
+      "title": "Add charts and narrative side-by-side view",
+      "description": "In the Streamlit UI, display generated narrative text alongside cost charts (bar/line charts showing monthly trends for each bucket). Narrative and charts should appear side-by-side for easy review.",
+      "status": "done",
+      "prd_sections": ["2.3"],
+      "depends_on": ["T-008"]
+    },
+    {
+      "id": "T-010",
+      "milestone": "M3: The Cockpit",
+      "title": "Add editable narrative text fields",
+      "description": "Make the generated narrative text editable in the Streamlit UI via text_area widgets. Users must be able to modify the auto-generated text to add context (e.g., explaining a spike) before exporting to PowerPoint.",
+      "status": "done",
+      "prd_sections": ["2.3"],
+      "depends_on": ["T-009"]
+    },
+    {
+      "id": "T-011",
+      "milestone": "M3: The Cockpit",
+      "title": "Build MCP-powered 'Investigate' widget",
+      "description": "Implement src/mcp_client.py and integrate into Streamlit UI. Add an 'Investigate' component that accepts natural language queries (e.g., 'What service drove the COGS increase?'). Route queries via MCP server to Redshift (read-only). Display query results in the UI.",
+      "status": "pending",
+      "notes": "Placeholder UI added in app.py. Full MCP client integration deferred — use Claude Code redshift MCP server directly for now.",
+      "prd_sections": ["3.4"],
+      "depends_on": ["T-008"]
+    },
+    {
+      "id": "T-012",
+      "milestone": "M3: The Cockpit",
+      "title": "Install Streamlit and UI dependencies",
+      "description": "Add streamlit, plotly or altair (for charts) via uv. Verify streamlit runs with uv run streamlit run app.py.",
+      "status": "done",
+      "prd_sections": ["4.1"]
+    },
+    {
+      "id": "T-013",
+      "milestone": "M4: The Artifact",
+      "title": "Build PowerPoint generation module",
+      "description": "Implement src/pptx_gen.py. Load the corporate .pptx template from pptx_template/. Use config.yaml mappings to place narrative text and data into the correct slides and shape placeholders by slide ID and placeholder ID. Output a downloadable .pptx file preserving corporate fonts, colors, and logos.",
+      "status": "done",
+      "prd_sections": ["3.5", "2.4"],
+      "depends_on": ["T-007"]
+    },
+    {
+      "id": "T-014",
+      "milestone": "M4: The Artifact",
+      "title": "Add PowerPoint download to Streamlit UI",
+      "description": "Add a 'Download PowerPoint' button to the Streamlit UI that triggers pptx_gen using the (possibly edited) narrative text and calculated data, then serves the .pptx file for download.",
+      "status": "done",
+      "prd_sections": ["3.5", "2.4"],
+      "depends_on": ["T-010", "T-013"]
+    },
+    {
+      "id": "T-015",
+      "milestone": "M4: The Artifact",
+      "title": "Install python-pptx dependency",
+      "description": "Add python-pptx via uv. Verify it can open and manipulate the existing template in pptx_template/.",
+      "status": "done",
+      "prd_sections": ["4.1"]
+    },
+    {
+      "id": "T-016",
+      "milestone": "M1: Foundation",
+      "title": "Add Excel forecast schema validation",
+      "description": "In the Excel ingestion path, add strict validation that the forecast file matches the expected schema (correct columns/rows per config mappings). Raise a clear, actionable error if the format has changed (e.g., rows were inserted). Mitigates the Excel Stability risk from PRD Section 7.",
+      "status": "done",
+      "prd_sections": ["3.2", "7"],
+      "depends_on": ["T-004"]
+    },
+    {
+      "id": "T-017",
+      "milestone": "M2: Logic & Text",
+      "title": "Handle unallocated/untagged spend bucket",
+      "description": "Add an 'Unallocated' bucket that captures spend not attributed to COGS or OpEx due to missing tags. Include in report output so untagged resources are visible. Mitigates the Tag Consistency risk from PRD Section 7.",
+      "status": "pending",
+      "notes": "Requires analysis of actual Redshift data to define what constitutes 'unallocated' spend. Can be added as a config.yaml bucket once criteria are defined.",
+      "prd_sections": ["7"],
+      "depends_on": ["T-003"]
+    }
+  ]
+}

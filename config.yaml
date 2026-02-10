@@ -1,0 +1,175 @@
+# FinOps Report Generator - Configuration
+# This file drives the entire report generation pipeline.
+# Database credentials are stored in .env (never in this file).
+
+# ---------------------------------------------------------------------------
+# Redshift table definitions
+# ---------------------------------------------------------------------------
+tables:
+  arctic_wolf_aws:
+    schema: public
+    table: daily_cur_summary
+    date_column: usage_date
+    description: "Arctic Wolf AWS CUR (Cost & Usage Report)"
+
+# ---------------------------------------------------------------------------
+# Common SQL filters applied to daily_cur_summary and cylance tables
+# ---------------------------------------------------------------------------
+common_filters:
+  - "charge_type != 'Credit'"
+  - "service NOT LIKE 'Databrick%'"
+  - "service NOT LIKE 'Tackle%'"
+
+# ---------------------------------------------------------------------------
+# Always-OpEx services
+# These services are classified as OpEx regardless of the account they
+# appear in or any other tagging.
+# ---------------------------------------------------------------------------
+always_opex_services:
+  - "Config"
+  - "Security Hub"
+  - "Inspector"
+  - "GuardDuty"
+  - "CloudTrail"
+  - "Backup"
+  - "Cost Explorer"
+  - "CloudWatch Events"
+  - "CloudWatch"
+  - "Systems Manager"
+
+# ---------------------------------------------------------------------------
+# Bucket definitions
+# Each bucket aggregates cost data from one or more sources.
+# ---------------------------------------------------------------------------
+buckets:
+  # -- Total Spend ----------------------------------------------------------
+  - name: "Total"
+    description: >
+      Total Arctic Wolf AWS cloud spend.
+    forecast_mapping_key: "total_spend"
+    sources:
+      - table: public.daily_cur_summary
+        cost_column: net_amortized_cost
+        date_column: usage_date
+        filters:
+          - "charge_type != 'Credit'"
+          - "service NOT LIKE 'Databrick%'"
+          - "service NOT LIKE 'Tackle%'"
+
+  # -- COGS ----------------------------------------------------------------
+  - name: "COGS"
+    description: >
+      Cost of Goods Sold — COGS-adjusted Arctic Wolf AWS costs.
+    forecast_mapping_key: "cogs_spend"
+    sources:
+      - table: public.daily_cur_summary
+        cost_column: cogs_adjusted_cost
+        date_column: usage_date
+        filters:
+          - "charge_type != 'Credit'"
+          - "service NOT LIKE 'Databrick%'"
+          - "service NOT LIKE 'Tackle%'"
+
+  # -- OpEx ----------------------------------------------------------------
+  - name: "OpEx"
+    description: >
+      Operational Expenditure — OpEx-adjusted Arctic Wolf AWS costs.
+    forecast_mapping_key: "opex_spend"
+    sources:
+      - table: public.daily_cur_summary
+        cost_column: opex_adjusted_cost
+        date_column: usage_date
+        filters:
+          - "charge_type != 'Credit'"
+          - "service NOT LIKE 'Databrick%'"
+          - "service NOT LIKE 'Tackle%'"
+
+# ---------------------------------------------------------------------------
+# Narrative templates
+# Used by the Logic Engine (narrative.py) to generate executive summaries.
+# ---------------------------------------------------------------------------
+narrative_templates:
+  mode_a:
+    description: "MoM + forecast variance narrative with bullet markup"
+    template: |
+      - Monthly Spend Change:
+        - {prev_month_name}: {previous_fmt}
+        - {curr_month_name}: {actual_fmt}
+        - {mom_delta_fmt} {mom_delta_dir} month-over-month ({mom_pct:.2f}% {mom_dir})
+      - Daily Average Spend (adjusted for days in month):
+        - {prev_month_name} ({prev_days} days): {daily_avg_prev_fmt} per day
+        - {curr_month_name} ({curr_days} days): {daily_avg_curr_fmt} per day
+        - {daily_delta_fmt} {daily_delta_dir} per day in {curr_month_name} ({mom_pct:.2f}% {mom_dir})
+      - Forecast Variance:
+        - Forecast: {forecast_fmt}
+        - Actual: {actual_fmt}
+        - {var_delta_fmt} {var_dir} forecast ({var_pct:.1f}%)
+
+  mode_b:
+    description: "MoM-only narrative when no forecast is available"
+    template: |
+      - Monthly Spend Change:
+        - {prev_month_name}: {previous_fmt}
+        - {curr_month_name}: {actual_fmt}
+        - {mom_delta_fmt} {mom_delta_dir} month-over-month ({mom_pct:.2f}% {mom_dir})
+      - Daily Average Spend (adjusted for days in month):
+        - {prev_month_name} ({prev_days} days): {daily_avg_prev_fmt} per day
+        - {curr_month_name} ({curr_days} days): {daily_avg_curr_fmt} per day
+        - {daily_delta_fmt} {daily_delta_dir} per day in {curr_month_name} ({mom_pct:.2f}% {mom_dir})
+
+# ---------------------------------------------------------------------------
+# Data files
+# Paths to Excel workbooks for forecasts and reference mappings.
+# Update these paths when new forecast files are received.
+# ---------------------------------------------------------------------------
+data_files:
+  forecasts:
+    cogs:
+      file_path: "data/forecasts/cogs-nov-2025-forecast.xlsx"
+      sheet_name: "Sheet1"
+      description: "COGS forecast by awn_app with monthly columns"
+      columns:
+        app: "awn_app"
+        category: "awn_category"
+    opex:
+      file_path: "data/forecasts/opex-nov-2025-forecast.xlsx"
+      sheet_name: "Sheet1"
+      description: "OpEx forecast by cost category with monthly columns"
+      columns:
+        category: "AWS Enterprise Support"
+
+  mapping:
+    app_category:
+      file_path: "data/mapping/app_category_mapping.xlsx"
+      sheet_name: "Sheet1"
+      description: "Arctic Wolf COGS app-to-category mapping with ownership metadata"
+      columns:
+        app: "awn_app"
+        category: "awn_category"
+        business_owner: "business_owner"
+        tech_owner: "tech_owner"
+
+# ---------------------------------------------------------------------------
+# PowerPoint output
+# Maps each bucket to slide and placeholder IDs in the corporate template.
+# Slide indices are 0-based. Placeholder IDs come from the .pptx template
+# and should be updated after inspecting the actual template file.
+# ---------------------------------------------------------------------------
+pptx:
+  template_path: "assets/template.pptx"
+  output_path: "output/finops_report_{month}_{year}.pptx"
+
+  title: 
+    heading: Arctic Wolf AWS Cloud Cost Report
+    sub_title: "FinOps Team | {month} {year}"
+
+  sections:
+    - title: "Arctic Wolf AWS Total Spend"
+      bucket: "Total"
+    - title: "Arctic Wolf AWS COGS"
+      bucket: "COGS"
+    - title: "Arctic Wolf AWS OpEx"
+      bucket: "OpEx"
+
+  month_over_month_slide:
+    text: >
