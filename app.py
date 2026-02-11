@@ -16,10 +16,17 @@ from typing import Any
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.app_data import (
+    build_app_metrics,
+    build_category_rollup,
+    compute_totals,
+    find_top_movers,
+    load_app_category_mapping,
+)
 from src.calculations import calculate_all_buckets
 from src.charts import build_all_trend_charts, build_trend_chart, render_chart_png
-from src.forecast import load_forecast, load_forecast_history
-from src.ingestion import fetch_bucket_actuals, fetch_bucket_history, load_config, close_shared_connection
+from src.forecast import load_app_forecasts, load_forecast, load_forecast_history
+from src.ingestion import fetch_app_actuals, fetch_bucket_actuals, fetch_bucket_history, load_config, close_shared_connection
 from src.narrative import generate_all_narratives
 
 atexit.register(close_shared_connection)
@@ -163,6 +170,19 @@ def _load_forecast_history_cached(month_name: str, year: int) -> dict[str, list[
     return load_forecast_history(config, month_name, year)
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_app_actuals_cached(month: str, year: int) -> dict[str, dict[str, float]]:
+    """Fetch app-level COGS actuals with a 1-hour cache."""
+    return fetch_app_actuals(month, year)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_app_forecasts_cached(month_name: str, year: int) -> dict[str, float]:
+    """Load per-app COGS forecasts with a 1-hour cache."""
+    config = load_config("config.yaml")
+    return load_app_forecasts(config, month_name, year)
+
+
 def _merge_history(
     actuals_history: dict[str, list[dict]],
     forecast_history: dict[str, list[dict]],
@@ -297,6 +317,38 @@ if generate_clicked:
         chart_images = build_all_trend_charts(chart_data, pptx_sections)
         st.write(f"Rendered {len(chart_images)} trend chart(s)")
 
+        # -- Phase 2: App-level COGS breakdown ---------------------------------
+        st.write("Fetching app-level COGS actuals...")
+        t0 = time.perf_counter()
+        app_actuals = _fetch_app_actuals_cached(month_number_str, selected_year)
+        elapsed = time.perf_counter() - t0
+        cached_note = " *(cached)*" if elapsed < 0.5 else ""
+        st.write(f"App actuals loaded: {len(app_actuals)} apps{cached_note}")
+
+        st.write("Loading app-level forecasts...")
+        t0 = time.perf_counter()
+        app_forecasts = _load_app_forecasts_cached(selected_month_name, selected_year)
+        elapsed = time.perf_counter() - t0
+        cached_note = " *(cached)*" if elapsed < 0.5 else ""
+        st.write(f"App forecasts loaded: {len(app_forecasts)} apps{cached_note}")
+
+        st.write("Building app metrics and category rollups...")
+        app_category_map = load_app_category_mapping(config)
+        app_metrics_list = build_app_metrics(app_actuals, app_forecasts, app_category_map)
+        category_rollup = build_category_rollup(app_metrics_list)
+        top_movers = find_top_movers(app_metrics_list)
+        app_totals = compute_totals(app_metrics_list, label_key="app")
+        category_totals = compute_totals(category_rollup, label_key="category")
+
+        app_data_dict = {
+            "app_metrics": app_metrics_list,
+            "category_rollup": category_rollup,
+            "top_movers": top_movers,
+            "app_totals": app_totals,
+            "category_totals": category_totals,
+        }
+        st.write(f"Built metrics for {len(app_metrics_list)} apps across {len(category_rollup)} categories")
+
         status.update(
             label="Report generated!", state="complete", expanded=False
         )
@@ -309,6 +361,7 @@ if generate_clicked:
     st.session_state["month_label"] = month_label
     st.session_state["chart_data"] = chart_data
     st.session_state["chart_images"] = chart_images
+    st.session_state["app_data"] = app_data_dict
 
     # Initialise editable narrative keys (only on fresh generation)
     for bucket_name, text in narratives.items():
@@ -402,6 +455,7 @@ if st.session_state.get("report_generated"):
                 st.session_state["config"],
                 month_label=st.session_state.get("month_label", ""),
                 chart_images=st.session_state.get("chart_images"),
+                app_data=st.session_state.get("app_data"),
             )
             return pptx_bytes
         except Exception as exc:

@@ -10,14 +10,18 @@ Each run:
 
 from __future__ import annotations
 
+import calendar
 import logging
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from lxml import etree
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN
+from pptx.oxml.ns import qn
+from pptx.util import Emu, Inches, Pt
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +213,422 @@ _LAYOUT_TITLE_ONLY = "Title Only"
 
 
 # ---------------------------------------------------------------------------
+# Table helpers (Phase 2)
+# ---------------------------------------------------------------------------
+
+# Maximum data rows (excluding header/total) before splitting to a new slide
+_MAX_TABLE_ROWS_PER_SLIDE = 16
+
+# "Dark Style 1 - Accent 4" built-in table style GUID
+_TABLE_STYLE_GUID = "{E929F9F4-4A8F-4326-A1B4-22849713DDAB}"
+
+
+def _fmt_abbreviated(value: float | None) -> str:
+    """Format a dollar value with abbreviated suffix (K, M, B)."""
+    if value is None:
+        return "N/A"
+    abs_val = abs(value)
+    sign = "-" if value < 0 else ""
+    if abs_val >= 1_000_000_000:
+        return f"{sign}${abs_val / 1_000_000_000:.2f}B"
+    if abs_val >= 1_000_000:
+        return f"{sign}${abs_val / 1_000_000:.2f}M"
+    if abs_val >= 1_000:
+        return f"{sign}${abs_val / 1_000:.1f}K"
+    return f"{sign}${abs_val:,.0f}"
+
+
+def _fmt_pct(value: float | None) -> str:
+    """Format a percentage value with sign."""
+    if value is None:
+        return "N/A"
+    sign = "+" if value > 0 else ""
+    return f"{sign}{value:.1f}%"
+
+
+def _apply_table_style(table: Any) -> None:
+    """Apply the 'Dark Style 1 - Accent 4' built-in style via GUID."""
+    tbl_pr = table._tbl.tblPr
+
+    # Remove any existing tableStyleId element (python-pptx default)
+    for child in list(tbl_pr):
+        tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+        if tag in ("tableStyleId", "tblStyle"):
+            tbl_pr.remove(child)
+
+    style_el = etree.SubElement(tbl_pr, qn("a:tableStyleId"))
+    style_el.text = _TABLE_STYLE_GUID
+
+
+def _set_cell(
+    cell: Any,
+    text: str,
+    font_size: int = 18,
+    bold: bool = False,
+    alignment: Any = None,
+) -> None:
+    """Write text into a table cell with formatting."""
+    cell.text = ""
+    tf = cell.text_frame
+    tf.word_wrap = True
+    # Reduce internal margins for tighter cell spacing
+    tf.margin_top = Emu(36000)
+    tf.margin_bottom = Emu(36000)
+
+    p = tf.paragraphs[0]
+    if alignment is not None:
+        p.alignment = alignment
+
+    run = p.add_run()
+    run.text = str(text)
+    run.font.size = Pt(font_size)
+    run.font.bold = bold
+
+
+def _font_size_for_row_count(data_row_count: int) -> int:
+    """Return the appropriate font size based on data row count.
+
+    - Under 10 data rows: 18pt
+    - 10-14 data rows: 16pt
+    - 15+ data rows: 14pt
+    """
+    if data_row_count >= 15:
+        return 14
+    if data_row_count >= 10:
+        return 16
+    return 18
+
+
+def _build_table_on_slide(
+    slide: Any,
+    headers: list[str],
+    data_rows: list[list[str]],
+    total_row: list[str] | None = None,
+    col_widths: list[float] | None = None,
+    font_size: int | None = None,
+) -> Any:
+    """Create a styled table on a slide.
+
+    Args:
+        slide: The slide to add the table to.
+        headers: Column header strings.
+        data_rows: List of lists, each inner list is one row of cell strings.
+        total_row: Optional totals row (same length as headers).
+        col_widths: Optional column widths in inches.
+        font_size: Optional font size override. If None, auto-computed
+            from the data row count.
+
+    Returns:
+        The python-pptx Table object.
+    """
+    n_rows = 1 + len(data_rows) + (1 if total_row else 0)
+    n_cols = len(headers)
+
+    if font_size is None:
+        font_size = _font_size_for_row_count(len(data_rows))
+
+    left = Inches(0.5)
+    top = Inches(1.4)
+    width = Inches(12.3)
+    height = Inches(min(0.32 * n_rows, 5.8))
+
+    shape = slide.shapes.add_table(n_rows, n_cols, left, top, width, height)
+    table = shape.table
+
+    # Set tblPr flags (no banded columns)
+    tbl_pr = table._tbl.tblPr
+    tbl_pr.set("firstRow", "1")
+    tbl_pr.set("lastRow", "1" if total_row else "0")
+    tbl_pr.set("bandRow", "1")
+    tbl_pr.set("bandCol", "0")
+    tbl_pr.set("firstCol", "1")
+
+    if col_widths:
+        for i, w in enumerate(col_widths):
+            table.columns[i].width = Inches(w)
+
+    # -- Populate cells --
+    for col_idx, header in enumerate(headers):
+        align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+        _set_cell(table.cell(0, col_idx), header, font_size=font_size, bold=True, alignment=align)
+
+    for row_idx, row_data in enumerate(data_rows, start=1):
+        for col_idx, value in enumerate(row_data):
+            align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+            _set_cell(table.cell(row_idx, col_idx), value, font_size=font_size, alignment=align)
+
+    if total_row:
+        t_row_idx = 1 + len(data_rows)
+        for col_idx, value in enumerate(total_row):
+            align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+            _set_cell(
+                table.cell(t_row_idx, col_idx), value, font_size=font_size, bold=True, alignment=align
+            )
+
+    # -- Apply Dark Style 1 - Accent 4 via built-in GUID --
+    _apply_table_style(table)
+
+    return table
+
+
+def _add_paginated_table_slides(
+    prs: Any,
+    layout: Any,
+    title: str,
+    headers: list[str],
+    data_rows: list[list[str]],
+    total_row: list[str] | None = None,
+    col_widths: list[float] | None = None,
+) -> None:
+    """Add one or more slides with a paginated table.
+
+    If data_rows exceeds ``_MAX_TABLE_ROWS_PER_SLIDE``, splits across
+    multiple slides.  The total row only appears on the last slide.
+    """
+    for page_start in range(0, max(len(data_rows), 1), _MAX_TABLE_ROWS_PER_SLIDE):
+        page_rows = data_rows[page_start : page_start + _MAX_TABLE_ROWS_PER_SLIDE]
+        is_last_page = (
+            page_start + _MAX_TABLE_ROWS_PER_SLIDE >= len(data_rows)
+        )
+
+        slide = prs.slides.add_slide(layout)
+        _set_text_by_idx(slide, 0, title)
+
+        # Font size is based on the number of rows on this specific page
+        page_font_size = _font_size_for_row_count(len(page_rows))
+
+        _build_table_on_slide(
+            slide,
+            headers,
+            page_rows,
+            total_row=total_row if is_last_page else None,
+            col_widths=col_widths,
+            font_size=page_font_size,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 slide builders
+# ---------------------------------------------------------------------------
+
+_TABLE_COL_WIDTHS = [3.0, 2.3, 2.3, 2.3, 2.4]
+_TABLE_HEADERS = ["", "Forecast", "Spend", "Change $", "Change %"]
+
+
+def _add_category_slides(
+    prs: Any,
+    layout: Any,
+    category_rollup: list[dict],
+    category_totals: dict,
+) -> None:
+    """Add the App Categories slide(s)."""
+    headers = ["Category"] + _TABLE_HEADERS[1:]
+
+    data_rows = []
+    for cat in category_rollup:
+        data_rows.append([
+            cat["category"],
+            _fmt_abbreviated(cat["forecast"]),
+            _fmt_abbreviated(cat["current_month"]),
+            _fmt_abbreviated(cat["var_change"]),
+            _fmt_pct(cat["var_pct"]),
+        ])
+
+    total_row = [
+        "Total",
+        _fmt_abbreviated(category_totals["forecast"]),
+        _fmt_abbreviated(category_totals["current_month"]),
+        _fmt_abbreviated(category_totals["var_change"]),
+        _fmt_pct(category_totals["var_pct"]),
+    ]
+
+    _add_paginated_table_slides(
+        prs, layout, "AWN COGS by Category",
+        headers, data_rows, total_row, _TABLE_COL_WIDTHS,
+    )
+
+
+def _compute_mom_headers(month_label: str) -> tuple[str, str]:
+    """Compute column headers for the MoM table.
+
+    Given month_label like "January 2026", returns abbreviated labels for
+    the previous month and the current month: ("Dec 2025", "Jan 2026").
+    """
+    parts = month_label.split()
+    month_name, year = parts[0], int(parts[1])
+    month_num = list(calendar.month_name).index(month_name)
+
+    # Current month label
+    current_label = f"{calendar.month_abbr[month_num]} {year}"
+
+    # Previous month label
+    prev_m, prev_y = month_num - 1, year
+    if prev_m == 0:
+        prev_m, prev_y = 12, year - 1
+    prev_label = f"{calendar.month_abbr[prev_m]} {prev_y}"
+
+    return prev_label, current_label
+
+
+def _add_mom_table_slides(
+    prs: Any,
+    layout: Any,
+    app_metrics: list[dict],
+    app_totals: dict,
+    month_label: str = "",
+) -> None:
+    """Add the Spend vs Previous Month slide(s)."""
+    prev_label, current_label = _compute_mom_headers(month_label)
+    headers = ["App", prev_label, current_label, "Change $", "Change %"]
+
+    data_rows = []
+    for m in app_metrics:
+        data_rows.append([
+            m["app"],
+            _fmt_abbreviated(m["previous_month"]),
+            _fmt_abbreviated(m["current_month"]),
+            _fmt_abbreviated(m["mom_change"]),
+            _fmt_pct(m["mom_pct"]),
+        ])
+
+    total_row = [
+        "Total",
+        _fmt_abbreviated(app_totals["previous_month"]),
+        _fmt_abbreviated(app_totals["current_month"]),
+        _fmt_abbreviated(app_totals["mom_change"]),
+        _fmt_pct(app_totals["mom_pct"]),
+    ]
+
+    _add_paginated_table_slides(
+        prs, layout, "AWN COGS Spend vs Previous Month",
+        headers, data_rows, total_row, _TABLE_COL_WIDTHS,
+    )
+
+
+def _add_forecast_vs_spend_slides(
+    prs: Any,
+    layout: Any,
+    app_metrics: list[dict],
+    app_totals: dict,
+) -> None:
+    """Add the Forecast vs Spend slide(s)."""
+    headers = ["App"] + _TABLE_HEADERS[1:]
+
+    data_rows = []
+    for m in app_metrics:
+        data_rows.append([
+            m["app"],
+            _fmt_abbreviated(m["forecast"]),
+            _fmt_abbreviated(m["current_month"]),
+            _fmt_abbreviated(m["var_change"]),
+            _fmt_pct(m["var_pct"]),
+        ])
+
+    total_row = [
+        "Total",
+        _fmt_abbreviated(app_totals["forecast"]),
+        _fmt_abbreviated(app_totals["current_month"]),
+        _fmt_abbreviated(app_totals["var_change"]),
+        _fmt_pct(app_totals["var_pct"]),
+    ]
+
+    _add_paginated_table_slides(
+        prs, layout, "AWN COGS Forecast vs Spend",
+        headers, data_rows, total_row, _TABLE_COL_WIDTHS,
+    )
+
+
+def _add_what_changed_slides(
+    prs: Any,
+    layout: Any,
+    top_movers: dict[str, list[dict]],
+) -> None:
+    """Add the 'What Changed?' slide with top increases and decreases."""
+    slide = prs.slides.add_slide(layout)
+    _set_text_by_idx(slide, 0, "What Changed?")
+
+    headers = ["App", "Forecast", "Spend", "Change $", "Change %"]
+
+    # --- Top increases table (upper half) ---
+    increases = top_movers.get("increases", [])
+    inc_rows = []
+    for m in increases:
+        inc_rows.append([
+            m["app"],
+            _fmt_abbreviated(m["forecast"]),
+            _fmt_abbreviated(m["current_month"]),
+            _fmt_abbreviated(m["var_change"]),
+            _fmt_pct(m["var_pct"]),
+        ])
+
+    inc_table_bottom = Inches(1.4)  # track bottom edge for positioning decreases
+    if inc_rows:
+        n_rows = 1 + len(inc_rows)
+        inc_top = Inches(1.4)
+        inc_height = Inches(0.40 * n_rows)
+        shape_inc = slide.shapes.add_table(
+            n_rows, 5, Inches(0.5), inc_top, Inches(12.3), inc_height,
+        )
+        tbl_inc = shape_inc.table
+        tbl_inc._tbl.tblPr.set("firstRow", "1")
+        tbl_inc._tbl.tblPr.set("lastRow", "0")
+        tbl_inc._tbl.tblPr.set("bandRow", "1")
+        tbl_inc._tbl.tblPr.set("bandCol", "0")
+        tbl_inc._tbl.tblPr.set("firstCol", "1")
+        for i, w in enumerate(_TABLE_COL_WIDTHS):
+            tbl_inc.columns[i].width = Inches(w)
+
+        inc_headers = ["Top Increases vs Forecast"] + headers[1:]
+        for col_idx, h in enumerate(inc_headers):
+            align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+            _set_cell(tbl_inc.cell(0, col_idx), h, bold=True, alignment=align)
+        for row_idx, row_data in enumerate(inc_rows, start=1):
+            for col_idx, val in enumerate(row_data):
+                align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+                _set_cell(tbl_inc.cell(row_idx, col_idx), val, alignment=align)
+        _apply_table_style(tbl_inc)
+        inc_table_bottom = inc_top + inc_height
+
+    # --- Top decreases table (lower half) ---
+    decreases = top_movers.get("decreases", [])
+    dec_rows = []
+    for m in decreases:
+        dec_rows.append([
+            m["app"],
+            _fmt_abbreviated(m["forecast"]),
+            _fmt_abbreviated(m["current_month"]),
+            _fmt_abbreviated(m["var_change"]),
+            _fmt_pct(m["var_pct"]),
+        ])
+
+    if dec_rows:
+        dec_top = inc_table_bottom + Inches(0.8)  # buffer gap between tables
+        n_rows = 1 + len(dec_rows)
+        dec_height = Inches(0.40 * n_rows)
+        shape_dec = slide.shapes.add_table(
+            n_rows, 5, Inches(0.5), dec_top, Inches(12.3), dec_height,
+        )
+        tbl_dec = shape_dec.table
+        tbl_dec._tbl.tblPr.set("firstRow", "1")
+        tbl_dec._tbl.tblPr.set("lastRow", "0")
+        tbl_dec._tbl.tblPr.set("bandRow", "1")
+        tbl_dec._tbl.tblPr.set("bandCol", "0")
+        tbl_dec._tbl.tblPr.set("firstCol", "1")
+        for i, w in enumerate(_TABLE_COL_WIDTHS):
+            tbl_dec.columns[i].width = Inches(w)
+
+        dec_headers = ["Top Decreases vs Forecast"] + headers[1:]
+        for col_idx, h in enumerate(dec_headers):
+            align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+            _set_cell(tbl_dec.cell(0, col_idx), h, bold=True, alignment=align)
+        for row_idx, row_data in enumerate(dec_rows, start=1):
+            for col_idx, val in enumerate(row_data):
+                align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+                _set_cell(tbl_dec.cell(row_idx, col_idx), val, alignment=align)
+        _apply_table_style(tbl_dec)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -219,6 +639,7 @@ def generate_pptx(
     month_label: str = "",
     project_root: Path | None = None,
     chart_images: dict[str, bytes] | None = None,
+    app_data: dict[str, Any] | None = None,
 ) -> bytes:
     """Build a PowerPoint deck from scratch using template layouts.
 
@@ -230,6 +651,8 @@ def generate_pptx(
             bucket's narrative text.
          c. (optional) A chart slide (``Title Only`` layout) with the
             6-month trend chart PNG.
+         d. (COGS only, optional) Phase 2 table slides if *app_data*
+            is provided.
 
     Args:
         narratives: Bucket name -> narrative text.
@@ -241,6 +664,9 @@ def generate_pptx(
         chart_images: Optional dict mapping bucket name to PNG bytes
             for the 6-month trend chart. When provided, a chart slide
             is inserted after each content slide.
+        app_data: Optional Phase 2 data dict with keys:
+            ``app_metrics``, ``category_rollup``, ``top_movers``,
+            ``app_totals``, ``category_totals``.
 
     Returns:
         The .pptx file as raw bytes.
@@ -253,17 +679,22 @@ def generate_pptx(
     transition_layout = _get_layout_by_name(prs, _LAYOUT_TRANSITION)
     content_layout = _get_layout_by_name(prs, _LAYOUT_CONTENT)
 
-    # Chart layout is optional -- only resolve if we have chart images
+    # Title Only layout -- used for chart slides and Phase 2 table slides
     chart_layout = None
-    if chart_images:
-        try:
-            chart_layout = _get_layout_by_name(prs, _LAYOUT_TITLE_ONLY)
-        except ValueError:
-            logger.warning(
-                "Layout '%s' not found; chart slides will be skipped.",
-                _LAYOUT_TITLE_ONLY,
-            )
+    table_layout = None
+    try:
+        title_only_layout = _get_layout_by_name(prs, _LAYOUT_TITLE_ONLY)
+        chart_layout = title_only_layout if chart_images else None
+        table_layout = title_only_layout if app_data else None
+    except ValueError:
+        logger.warning(
+            "Layout '%s' not found; chart and table slides will be skipped.",
+            _LAYOUT_TITLE_ONLY,
+        )
+        if chart_images:
             chart_images = None
+        if app_data:
+            app_data = None
 
     _remove_all_slides(prs)
 
@@ -308,6 +739,33 @@ def generate_pptx(
                 top=Inches(1.40),
                 width=Inches(12.27),
                 height=Inches(5.80),
+            )
+
+        # Phase 2: App breakdown tables (after COGS section only)
+        if bucket_name == "COGS" and app_data and table_layout:
+            # Transition slide for breakdown section
+            trans = prs.slides.add_slide(transition_layout)
+            _set_text_by_idx(trans, 0, "AWN COGS Breakdown")
+
+            _add_category_slides(
+                prs, table_layout,
+                app_data["category_rollup"],
+                app_data["category_totals"],
+            )
+            _add_mom_table_slides(
+                prs, table_layout,
+                app_data["app_metrics"],
+                app_data["app_totals"],
+                month_label=month_label,
+            )
+            _add_forecast_vs_spend_slides(
+                prs, table_layout,
+                app_data["app_metrics"],
+                app_data["app_totals"],
+            )
+            _add_what_changed_slides(
+                prs, table_layout,
+                app_data["top_movers"],
             )
 
     # -- Serialize ---------------------------------------------------------

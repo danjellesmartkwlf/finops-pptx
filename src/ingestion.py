@@ -308,6 +308,87 @@ def fetch_bucket_actuals(
 
 
 # ---------------------------------------------------------------------------
+# App-level COGS actuals (Phase 2)
+# ---------------------------------------------------------------------------
+
+def fetch_app_actuals(
+    month: str,
+    year: int,
+    config_path: str = "config.yaml",
+) -> dict[str, dict[str, float]]:
+    """Fetch current and previous month COGS spend grouped by awn_app.
+
+    Queries ``daily_cur_summary`` with the same common filters used for the
+    COGS bucket, but groups results by ``awn_app`` instead of summing
+    everything into a single total.
+
+    Args:
+        month: Two-digit month string for the reporting month (e.g. '01').
+        year: Four-digit reporting year (e.g. 2026).
+        config_path: Path to the YAML config file.
+
+    Returns:
+        A dict keyed by awn_app name. Each value is a dict with keys:
+            - ``current_month`` (float): COGS spend for the given month.
+            - ``previous_month`` (float): COGS spend for the prior month.
+    """
+    config = load_config(config_path)
+
+    # Find the COGS bucket to reuse its source definition
+    cogs_bucket = None
+    for bucket in config.get("buckets", []):
+        if bucket["name"] == "COGS":
+            cogs_bucket = bucket
+            break
+    if cogs_bucket is None:
+        raise ValueError("No 'COGS' bucket found in config.")
+
+    source = cogs_bucket["sources"][0]
+    table = source["table"]
+    cost_column = source["cost_column"]
+    date_column = source["date_column"]
+    filters: list[str] = source.get("filters", [])
+
+    prev_month, prev_year = _previous_month(month, year)
+    two_months_ago_m, two_months_ago_y = _previous_month(prev_month, prev_year)
+
+    conn = get_shared_connection()
+    results: dict[str, dict[str, float]] = {}
+
+    for m, y, period in [
+        (month, year, "current_month"),
+        (prev_month, prev_year, "previous_month"),
+        (two_months_ago_m, two_months_ago_y, "two_months_ago"),
+    ]:
+        where_parts = [_build_month_filter(date_column, m, y)] + list(filters)
+        where_clause = " AND ".join(where_parts)
+
+        sql = (
+            f"SELECT COALESCE(awn_app, 'other') AS app_name, "
+            f"COALESCE(SUM({cost_column}), 0) AS total_cost "
+            f"FROM {table} "
+            f"WHERE {where_clause} "
+            f"GROUP BY COALESCE(awn_app, 'other') "
+            f"ORDER BY total_cost DESC"
+        )
+        logger.debug("App actuals SQL:\n%s", sql)
+
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+
+        for row in rows:
+            app_name = str(row[0]) if row[0] else "other"
+            cost_val = float(row[1]) if row[1] is not None else 0.0
+            if app_name not in results:
+                results[app_name] = {"current_month": 0.0, "previous_month": 0.0, "two_months_ago": 0.0}
+            results[app_name][period] = cost_val
+
+    logger.info("Fetched app-level actuals for %d apps", len(results))
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Historical data (6-month trend)
 # ---------------------------------------------------------------------------
 

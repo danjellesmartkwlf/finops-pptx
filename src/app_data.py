@@ -1,0 +1,288 @@
+"""App-level COGS data processing for Phase 2 slides.
+
+Loads the app-to-category mapping, merges with actuals and forecasts,
+computes category rollups, and identifies top movers.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Mapping loader
+# ---------------------------------------------------------------------------
+
+def load_app_category_mapping(
+    config: dict[str, Any],
+) -> dict[str, str]:
+    """Load the awn_app -> awn_category mapping from the Excel file.
+
+    Args:
+        config: Parsed config.yaml.
+
+    Returns:
+        A dict mapping each awn_app name to its awn_category.
+    """
+    mapping_cfg = (
+        config.get("data_files", {})
+        .get("mapping", {})
+        .get("app_category", {})
+    )
+    file_path = Path(mapping_cfg.get("file_path", "data/mapping/app_category_mapping.xlsx"))
+    sheet_name = mapping_cfg.get("sheet_name", "Sheet1")
+
+    if not file_path.exists():
+        logger.warning("App category mapping file not found: %s", file_path)
+        return {}
+
+    df = pd.read_excel(file_path, sheet_name=sheet_name)
+    result: dict[str, str] = {}
+    for _, row in df.iterrows():
+        app = row.get("awn_app")
+        cat = row.get("awn_category")
+        if pd.notna(app) and pd.notna(cat):
+            result[str(app).strip()] = str(cat).strip()
+
+    logger.info("Loaded %d app-to-category mappings", len(result))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# App metrics builder
+# ---------------------------------------------------------------------------
+
+def build_app_metrics(
+    app_actuals: dict[str, dict[str, float]],
+    app_forecasts: dict[str, float],
+    app_category_map: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Build per-app metrics combining actuals, forecasts, and category.
+
+    Args:
+        app_actuals: Keyed by awn_app. Each value has ``current_month``
+            and ``previous_month``.
+        app_forecasts: Keyed by awn_app -> forecast value.
+        app_category_map: Keyed by awn_app -> awn_category.
+
+    Returns:
+        A list of dicts sorted by current_month spend descending, each with:
+            - ``app``: awn_app name
+            - ``category``: awn_category (or "Other")
+            - ``current_month``: current month spend
+            - ``previous_month``: previous month spend
+            - ``forecast``: forecast value or None
+            - ``mom_change``: current - previous
+            - ``mom_pct``: MoM percentage change
+            - ``var_change``: actual - forecast (or None)
+            - ``var_pct``: variance percentage (or None)
+    """
+    all_apps = set(app_actuals.keys()) | set(app_forecasts.keys())
+    metrics: list[dict[str, Any]] = []
+
+    for app in all_apps:
+        actuals = app_actuals.get(app, {"current_month": 0.0, "previous_month": 0.0, "two_months_ago": 0.0})
+        current = actuals["current_month"]
+        previous = actuals["previous_month"]
+        two_months_ago = actuals.get("two_months_ago", 0.0)
+        forecast = app_forecasts.get(app)
+        category = app_category_map.get(app, "Other")
+
+        mom_change = current - previous
+        mom_pct = (mom_change / previous * 100.0) if previous != 0 else 0.0
+
+        # Previous month vs two months ago
+        prev_vs_prior_change = previous - two_months_ago
+        prev_vs_prior_pct = (prev_vs_prior_change / two_months_ago * 100.0) if two_months_ago != 0 else 0.0
+
+        var_change: float | None = None
+        var_pct: float | None = None
+        if forecast is not None:
+            var_change = current - forecast
+            var_pct = (var_change / forecast * 100.0) if forecast != 0 else 0.0
+
+        metrics.append({
+            "app": app,
+            "category": category,
+            "current_month": current,
+            "previous_month": previous,
+            "two_months_ago": two_months_ago,
+            "forecast": forecast,
+            "mom_change": mom_change,
+            "mom_pct": mom_pct,
+            "prev_vs_prior_change": prev_vs_prior_change,
+            "prev_vs_prior_pct": prev_vs_prior_pct,
+            "var_change": var_change,
+            "var_pct": var_pct,
+        })
+
+    metrics.sort(key=lambda m: m["current_month"], reverse=True)
+    return metrics
+
+
+# ---------------------------------------------------------------------------
+# Category rollup
+# ---------------------------------------------------------------------------
+
+def build_category_rollup(
+    app_metrics: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Aggregate app metrics into category-level totals.
+
+    Args:
+        app_metrics: Per-app metrics from :func:`build_app_metrics`.
+
+    Returns:
+        A list of dicts sorted by current_month spend descending, each with:
+            - ``category``: awn_category name
+            - ``current_month``: summed current month spend
+            - ``previous_month``: summed previous month spend
+            - ``forecast``: summed forecast (None if no apps have forecast)
+            - ``mom_change``: current - previous
+            - ``mom_pct``: MoM percentage change
+            - ``var_change``: actual - forecast (or None)
+            - ``var_pct``: variance percentage (or None)
+    """
+    categories: dict[str, dict[str, Any]] = {}
+
+    for m in app_metrics:
+        cat = m["category"]
+        if cat not in categories:
+            categories[cat] = {
+                "category": cat,
+                "current_month": 0.0,
+                "previous_month": 0.0,
+                "forecast_sum": 0.0,
+                "has_forecast": False,
+            }
+        categories[cat]["current_month"] += m["current_month"]
+        categories[cat]["previous_month"] += m["previous_month"]
+        if m["forecast"] is not None:
+            categories[cat]["forecast_sum"] += m["forecast"]
+            categories[cat]["has_forecast"] = True
+
+    result: list[dict[str, Any]] = []
+    for cat_data in categories.values():
+        current = cat_data["current_month"]
+        previous = cat_data["previous_month"]
+        forecast = cat_data["forecast_sum"] if cat_data["has_forecast"] else None
+
+        mom_change = current - previous
+        mom_pct = (mom_change / previous * 100.0) if previous != 0 else 0.0
+
+        var_change: float | None = None
+        var_pct: float | None = None
+        if forecast is not None:
+            var_change = current - forecast
+            var_pct = (var_change / forecast * 100.0) if forecast != 0 else 0.0
+
+        result.append({
+            "category": cat_data["category"],
+            "current_month": current,
+            "previous_month": previous,
+            "forecast": forecast,
+            "mom_change": mom_change,
+            "mom_pct": mom_pct,
+            "var_change": var_change,
+            "var_pct": var_pct,
+        })
+
+    result.sort(key=lambda r: r["current_month"], reverse=True)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Top movers
+# ---------------------------------------------------------------------------
+
+def find_top_movers(
+    app_metrics: list[dict[str, Any]],
+    n: int = 3,
+) -> dict[str, list[dict[str, Any]]]:
+    """Identify the top N apps with largest spend changes vs forecast.
+
+    Only considers apps that have a forecast value.
+
+    Args:
+        app_metrics: Per-app metrics from :func:`build_app_metrics`.
+        n: Number of top movers in each direction (default 3).
+
+    Returns:
+        A dict with keys ``"increases"`` and ``"decreases"``, each a list
+        of app metric dicts sorted by absolute variance change.
+    """
+    with_forecast = [m for m in app_metrics if m["var_change"] is not None]
+
+    increases = sorted(
+        [m for m in with_forecast if m["var_change"] > 0],
+        key=lambda m: m["var_change"],
+        reverse=True,
+    )[:n]
+
+    decreases = sorted(
+        [m for m in with_forecast if m["var_change"] < 0],
+        key=lambda m: m["var_change"],
+    )[:n]
+
+    return {
+        "increases": increases,
+        "decreases": decreases,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Totals row builder
+# ---------------------------------------------------------------------------
+
+def compute_totals(
+    rows: list[dict[str, Any]],
+    label_key: str = "app",
+) -> dict[str, Any]:
+    """Compute a totals row from a list of metric dicts.
+
+    Args:
+        rows: List of metric dicts (app-level or category-level).
+        label_key: The key used for the row label ("app" or "category").
+
+    Returns:
+        A single dict with summed values and "Total" as the label.
+    """
+    total_current = sum(r["current_month"] for r in rows)
+    total_previous = sum(r["previous_month"] for r in rows)
+    total_two_months_ago = sum(r.get("two_months_ago", 0.0) for r in rows)
+
+    forecasts = [r["forecast"] for r in rows if r["forecast"] is not None]
+    total_forecast = sum(forecasts) if forecasts else None
+
+    mom_change = total_current - total_previous
+    mom_pct = (mom_change / total_previous * 100.0) if total_previous != 0 else 0.0
+
+    prev_vs_prior_change = total_previous - total_two_months_ago
+    prev_vs_prior_pct = (prev_vs_prior_change / total_two_months_ago * 100.0) if total_two_months_ago != 0 else 0.0
+
+    var_change: float | None = None
+    var_pct: float | None = None
+    if total_forecast is not None:
+        var_change = total_current - total_forecast
+        var_pct = (var_change / total_forecast * 100.0) if total_forecast != 0 else 0.0
+
+    return {
+        label_key: "Total",
+        "category": "Total",
+        "current_month": total_current,
+        "previous_month": total_previous,
+        "two_months_ago": total_two_months_ago,
+        "forecast": total_forecast,
+        "mom_change": mom_change,
+        "mom_pct": mom_pct,
+        "prev_vs_prior_change": prev_vs_prior_change,
+        "prev_vs_prior_pct": prev_vs_prior_pct,
+        "var_change": var_change,
+        "var_pct": var_pct,
+    }

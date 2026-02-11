@@ -13,11 +13,19 @@ import calendar
 import sys
 from pathlib import Path
 
+from src.app_data import (
+    build_app_metrics,
+    build_category_rollup,
+    compute_totals,
+    find_top_movers,
+    load_app_category_mapping,
+)
 from src.calculations import calculate_all_buckets
 from src.charts import build_all_trend_charts
-from src.forecast import load_forecast, load_forecast_history
+from src.forecast import load_app_forecasts, load_forecast, load_forecast_history
 from src.ingestion import (
     close_shared_connection,
+    fetch_app_actuals,
     fetch_bucket_actuals,
     fetch_bucket_history,
     load_config,
@@ -105,7 +113,35 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
     sections = config.get("pptx", {}).get("sections", [])
     chart_images = build_all_trend_charts(chart_data, sections)
 
-    # 6. Build PPTX
+    # 6. Phase 2: App-level COGS breakdown
+    print("  Fetching app-level COGS actuals ...")
+    app_actuals = fetch_app_actuals(month_num, year)
+    print(f"    Found {len(app_actuals)} apps")
+
+    print("  Loading app-level forecasts ...")
+    app_forecasts = load_app_forecasts(config, month_name, year)
+    print(f"    Loaded forecasts for {len(app_forecasts)} apps")
+
+    print("  Loading app category mapping ...")
+    app_category_map = load_app_category_mapping(config)
+    print(f"    Mapped {len(app_category_map)} apps to categories")
+
+    print("  Building app metrics ...")
+    app_metrics = build_app_metrics(app_actuals, app_forecasts, app_category_map)
+    category_rollup = build_category_rollup(app_metrics)
+    top_movers = find_top_movers(app_metrics)
+    app_totals = compute_totals(app_metrics, label_key="app")
+    category_totals = compute_totals(category_rollup, label_key="category")
+
+    app_data = {
+        "app_metrics": app_metrics,
+        "category_rollup": category_rollup,
+        "top_movers": top_movers,
+        "app_totals": app_totals,
+        "category_totals": category_totals,
+    }
+
+    # 7. Build PPTX
     print("  Building PowerPoint ...")
     pptx_bytes = generate_pptx(
         narratives,
@@ -113,9 +149,10 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         config,
         month_label=month_label,
         chart_images=chart_images,
+        app_data=app_data,
     )
 
-    # 7. Write file
+    # 8. Write file
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(pptx_bytes)

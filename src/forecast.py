@@ -394,6 +394,70 @@ def load_forecast(
     return results
 
 
+def load_app_forecasts(
+    config: dict[str, Any],
+    month: str,
+    year: int,
+) -> dict[str, float]:
+    """Load per-app COGS forecast values for a given month.
+
+    Reads the COGS forecast workbook (which has one row per ``awn_app``)
+    and returns the forecast value for each app in the target month column.
+
+    Args:
+        config: The full application config dict (parsed from config.yaml).
+        month: Month name (full or abbreviated), e.g. "January".
+        year: Four-digit year, e.g. 2026.
+
+    Returns:
+        A dict mapping each ``awn_app`` name to its forecast spend as a float.
+        Apps with missing or non-numeric values are excluded.
+    """
+    column_key = _month_column_key(month, year)
+    forecasts_cfg = config.get("data_files", {}).get("forecasts", {})
+    cogs_cfg = forecasts_cfg.get("cogs", {})
+
+    file_path = Path(cogs_cfg.get("file_path", ""))
+    sheet_name = cogs_cfg.get("sheet_name", "Sheet1")
+
+    if not file_path.exists():
+        logger.warning("COGS forecast file not found: %s", file_path)
+        return {}
+
+    try:
+        df = pd.read_excel(file_path, sheet_name=sheet_name)
+    except Exception:
+        logger.warning("Failed to read COGS forecast file: %s", file_path, exc_info=True)
+        return {}
+
+    # Identify the app column (first column) and month column
+    app_col = df.columns[0]  # "awn_app"
+
+    if column_key not in df.columns:
+        logger.warning(
+            "Month column '%s' not found in COGS forecast. Available: %s",
+            column_key,
+            list(df.columns),
+        )
+        return {}
+
+    result: dict[str, float] = {}
+    for _, row in df.iterrows():
+        app_name = row[app_col]
+        if pd.isna(app_name):
+            continue
+        app_name = str(app_name).strip()
+        val = row[column_key]
+        if pd.notna(val):
+            try:
+                result[app_name] = float(val)
+            except (TypeError, ValueError):
+                continue
+
+    logger.info("Loaded per-app forecasts for %d apps from %s", len(result), file_path)
+    return result
+
+
 def load_forecast_history(
     config: dict[str, Any],
     month: str,
