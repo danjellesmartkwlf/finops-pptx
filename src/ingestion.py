@@ -7,6 +7,7 @@ and returns aggregated monthly cost data per bucket.
 
 from __future__ import annotations
 
+import calendar
 import logging
 import os
 from typing import Any
@@ -301,6 +302,156 @@ def fetch_bucket_actuals(
             bucket_name,
             current_total,
             previous_total,
+        )
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Historical data (6-month trend)
+# ---------------------------------------------------------------------------
+
+def _walk_back_months(
+    month: str,
+    year: int,
+    count: int,
+) -> list[tuple[str, int]]:
+    """Return a chronological list of (month_str, year) tuples going back *count* months.
+
+    The list starts with the oldest month and ends with the given month/year.
+
+    Args:
+        month: Two-digit month string for the most recent month.
+        year: Four-digit year for the most recent month.
+        count: How many months to include (including the given month).
+
+    Returns:
+        A list of (month_str, year) tuples in chronological order.
+    """
+    pairs: list[tuple[str, int]] = []
+    m, y = int(month), year
+    for _ in range(count):
+        pairs.append((f"{m:02d}", y))
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    pairs.reverse()
+    return pairs
+
+
+def _build_history_query(
+    source: dict[str, Any],
+    months: list[tuple[str, int]],
+) -> str:
+    """Build a single query that returns monthly aggregates for multiple months.
+
+    Uses ``GROUP BY DATE_TRUNC('month', date_column)`` to batch all requested
+    months into one round-trip per source.
+
+    Args:
+        source: A single source dict from config.yaml.
+        months: List of (month_str, year) tuples to include.
+
+    Returns:
+        A complete SQL SELECT statement.
+    """
+    table = source["table"]
+    cost_column = source["cost_column"]
+    date_column = source["date_column"]
+    filters: list[str] = source.get("filters", [])
+
+    # Build month predicates: DATE_TRUNC('month', col) IN ('2026-01-01', ...)
+    date_literals = ", ".join(
+        f"'{y}-{m}-01'" for m, y in months
+    )
+    month_clause = f"DATE_TRUNC('month', {date_column}) IN ({date_literals})"
+
+    where_parts = [month_clause] + list(filters)
+    where_clause = " AND ".join(where_parts)
+
+    return (
+        f"SELECT DATE_TRUNC('month', {date_column}) AS month_start, "
+        f"COALESCE(SUM({cost_column}), 0) AS total_cost "
+        f"FROM {table} "
+        f"WHERE {where_clause} "
+        f"GROUP BY DATE_TRUNC('month', {date_column}) "
+        f"ORDER BY month_start"
+    )
+
+
+def fetch_bucket_history(
+    month: str,
+    year: int,
+    num_months: int = 6,
+    config_path: str = "config.yaml",
+) -> dict[str, list[dict[str, Any]]]:
+    """Fetch *num_months* of historical monthly actuals for every configured bucket.
+
+    Args:
+        month: Two-digit month string for the most recent month.
+        year: Four-digit year for the most recent month.
+        num_months: Number of months to include (default 6).
+        config_path: Path to the YAML config file.
+
+    Returns:
+        A dict keyed by bucket name. Each value is a chronological list of dicts
+        with keys ``month_start`` (str, e.g. "Jan 2026") and ``actual`` (float).
+    """
+    config = load_config(config_path)
+    buckets: list[dict[str, Any]] = config.get("buckets", [])
+    months = _walk_back_months(month, year, num_months)
+
+    # Build month_label lookup: "YYYY-MM-01" -> "Jan 2026"
+    label_lookup: dict[str, str] = {}
+    for m_str, y in months:
+        m_int = int(m_str)
+        abbr = calendar.month_abbr[m_int]
+        label_lookup[f"{y}-{m_str}-01"] = f"{abbr} {y}"
+
+    conn = get_shared_connection()
+    results: dict[str, list[dict[str, Any]]] = {}
+
+    for bucket in buckets:
+        bucket_name: str = bucket["name"]
+        sources: list[dict[str, Any]] = bucket.get("sources", [])
+
+        # Accumulator keyed by date string
+        monthly_totals: dict[str, float] = {
+            f"{y}-{m}-01": 0.0 for m, y in months
+        }
+
+        for source in sources:
+            sql = _build_history_query(source, months)
+            logger.debug("History SQL:\n%s", sql)
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                rows = cur.fetchall()
+            for row in rows:
+                date_val = row[0]
+                cost_val = float(row[1]) if row[1] is not None else 0.0
+                # Normalise the date to "YYYY-MM-01" string
+                if hasattr(date_val, "strftime"):
+                    key = date_val.strftime("%Y-%m-%d")
+                else:
+                    key = str(date_val)[:10]
+                if key in monthly_totals:
+                    monthly_totals[key] += cost_val
+
+        # Build chronological list with human-readable labels
+        history: list[dict[str, Any]] = []
+        for m_str, y in months:
+            date_key = f"{y}-{m_str}-01"
+            history.append({
+                "month_start": label_lookup[date_key],
+                "actual": monthly_totals[date_key],
+            })
+
+        results[bucket_name] = history
+        logger.info(
+            "Bucket '%s' history: %d months loaded",
+            bucket_name,
+            len(history),
         )
 
     return results

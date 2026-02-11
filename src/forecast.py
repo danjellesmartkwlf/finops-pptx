@@ -394,6 +394,91 @@ def load_forecast(
     return results
 
 
+def load_forecast_history(
+    config: dict[str, Any],
+    month: str,
+    year: int,
+    num_months: int = 6,
+) -> dict[str, list[dict[str, Any]]]:
+    """Load *num_months* of forecast values for COGS, OpEx, and Total.
+
+    Iterates backwards from the given month/year, calling the existing
+    ``_sum_column()`` helper for each month and each forecast file.  Months
+    outside the Excel forecast range naturally return ``None``.
+
+    Args:
+        config: The full application config dict (parsed from config.yaml).
+        month: Full month name (e.g. "January").
+        year: Four-digit year (e.g. 2026).
+        num_months: How many months to include (default 6).
+
+    Returns:
+        A dict keyed by forecast mapping key (``"cogs_spend"``,
+        ``"opex_spend"``, ``"total_spend"``).  Each value is a chronological
+        list of dicts with ``month_label`` (str, e.g. "Jan 2026") and
+        ``forecast`` (float | None).
+    """
+    # Walk back months chronologically
+    target_month, target_year = _resolve_month_year(month, year)
+    month_list: list[tuple[int, int]] = []
+    m, y = target_month, target_year
+    for _ in range(num_months):
+        month_list.append((m, y))
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    month_list.reverse()
+
+    forecasts_cfg = config.get("data_files", {}).get("forecasts", {})
+    cogs_cfg = forecasts_cfg.get("cogs", {})
+    opex_cfg = forecasts_cfg.get("opex", {})
+
+    cogs_history: list[dict[str, Any]] = []
+    opex_history: list[dict[str, Any]] = []
+    total_history: list[dict[str, Any]] = []
+
+    for m_num, y_num in month_list:
+        month_name = calendar.month_name[m_num]
+        month_abbr = calendar.month_abbr[m_num]
+        label = f"{month_abbr} {y_num}"
+        column_key = f"{month_abbr}-{y_num}"
+
+        # COGS forecast
+        cogs_val: float | None = None
+        if cogs_cfg.get("file_path"):
+            cogs_val = _sum_column(
+                file_path=Path(cogs_cfg["file_path"]),
+                sheet_name=cogs_cfg.get("sheet_name", "Sheet1"),
+                column_key=column_key,
+                label="COGS",
+            )
+        cogs_history.append({"month_label": label, "forecast": cogs_val})
+
+        # OpEx forecast
+        opex_val: float | None = None
+        if opex_cfg.get("file_path"):
+            opex_val = _sum_column(
+                file_path=Path(opex_cfg["file_path"]),
+                sheet_name=opex_cfg.get("sheet_name", "Sheet1"),
+                column_key=column_key,
+                label="OpEx",
+            )
+        opex_history.append({"month_label": label, "forecast": opex_val})
+
+        # Total = COGS + OpEx when both exist
+        total_val: float | None = None
+        if cogs_val is not None and opex_val is not None:
+            total_val = cogs_val + opex_val
+        total_history.append({"month_label": label, "forecast": total_val})
+
+    return {
+        "cogs_spend": cogs_history,
+        "opex_spend": opex_history,
+        "total_spend": total_history,
+    }
+
+
 def validate_forecast_schema(config: dict[str, Any]) -> list[str]:
     """Validate that all expected row labels exist in the forecast spreadsheet.
 

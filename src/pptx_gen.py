@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Any
 
 from pptx import Presentation
-from pptx.util import Pt
+from pptx.dml.color import RGBColor
+from pptx.util import Inches, Pt
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +174,9 @@ def _set_placeholder_text(
             run.font.size = Pt(font_size_pt)
         elif existing_font_size is not None:
             run.font.size = existing_font_size
-        if existing_font_color is not None:
+        if item["bold"]:
+            run.font.color.rgb = RGBColor(0xFF, 0x73, 0x0E)
+        elif existing_font_color is not None:
             run.font.color.rgb = existing_font_color
 
         run.font.bold = item["bold"]
@@ -202,6 +205,7 @@ def _set_text_by_idx(slide: Any, idx: int, text: str) -> bool:
 _LAYOUT_TITLE_SLIDE = "Title Slide A"
 _LAYOUT_TRANSITION = "Transition Slide B"
 _LAYOUT_CONTENT = "Title, Body"
+_LAYOUT_TITLE_ONLY = "Title Only"
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +218,7 @@ def generate_pptx(
     config: dict[str, Any],
     month_label: str = "",
     project_root: Path | None = None,
+    chart_images: dict[str, bytes] | None = None,
 ) -> bytes:
     """Build a PowerPoint deck from scratch using template layouts.
 
@@ -223,6 +228,8 @@ def generate_pptx(
          a. A transition slide (``Transition Slide B`` layout).
          b. A content slide (``Title, Body`` layout) with the
             bucket's narrative text.
+         c. (optional) A chart slide (``Title Only`` layout) with the
+            6-month trend chart PNG.
 
     Args:
         narratives: Bucket name -> narrative text.
@@ -231,6 +238,9 @@ def generate_pptx(
         month_label: e.g. ``"January 2026"`` -- used to format the
             title slide heading and subtitle via ``{month}``/``{year}``.
         project_root: Optional project root for template resolution.
+        chart_images: Optional dict mapping bucket name to PNG bytes
+            for the 6-month trend chart. When provided, a chart slide
+            is inserted after each content slide.
 
     Returns:
         The .pptx file as raw bytes.
@@ -242,6 +252,18 @@ def generate_pptx(
     title_layout = _get_layout_by_name(prs, _LAYOUT_TITLE_SLIDE)
     transition_layout = _get_layout_by_name(prs, _LAYOUT_TRANSITION)
     content_layout = _get_layout_by_name(prs, _LAYOUT_CONTENT)
+
+    # Chart layout is optional -- only resolve if we have chart images
+    chart_layout = None
+    if chart_images:
+        try:
+            chart_layout = _get_layout_by_name(prs, _LAYOUT_TITLE_ONLY)
+        except ValueError:
+            logger.warning(
+                "Layout '%s' not found; chart slides will be skipped.",
+                _LAYOUT_TITLE_ONLY,
+            )
+            chart_images = None
 
     _remove_all_slides(prs)
 
@@ -260,7 +282,7 @@ def generate_pptx(
     _set_text_by_idx(title_slide, 0, title_cfg.get("heading", "").format(**fmt))
     _set_text_by_idx(title_slide, 10, title_cfg.get("sub_title", "").format(**fmt))
 
-    # -- 2. Section slides (transition + content) --------------------------
+    # -- 2. Section slides (transition + content + chart) ------------------
     for section in pptx_cfg.get("sections", []):
         section_title = section.get("title", "")
         bucket_name = section.get("bucket", "")
@@ -273,6 +295,20 @@ def generate_pptx(
         content_slide = prs.slides.add_slide(content_layout)
         _set_text_by_idx(content_slide, 0, section_title)
         _set_text_by_idx(content_slide, 11, narratives.get(bucket_name, ""))
+
+        # Chart slide (if image available)
+        if chart_images and chart_layout and bucket_name in chart_images:
+            chart_slide = prs.slides.add_slide(chart_layout)
+            _set_text_by_idx(chart_slide, 0, section_title)
+
+            png_stream = BytesIO(chart_images[bucket_name])
+            chart_slide.shapes.add_picture(
+                png_stream,
+                left=Inches(0.53),
+                top=Inches(1.40),
+                width=Inches(12.27),
+                height=Inches(5.80),
+            )
 
     # -- Serialize ---------------------------------------------------------
     buffer = BytesIO()

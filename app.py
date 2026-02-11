@@ -17,8 +17,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src.calculations import calculate_all_buckets
-from src.forecast import load_forecast
-from src.ingestion import fetch_bucket_actuals, load_config, close_shared_connection
+from src.charts import build_all_trend_charts, build_trend_chart, render_chart_png
+from src.forecast import load_forecast, load_forecast_history
+from src.ingestion import fetch_bucket_actuals, fetch_bucket_history, load_config, close_shared_connection
 from src.narrative import generate_all_narratives
 
 atexit.register(close_shared_connection)
@@ -149,6 +150,57 @@ def _load_forecast_cached(month_name: str, year: int) -> dict[str, float | None]
     return load_forecast(config, month_name, year)
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_history_cached(month: str, year: int) -> dict[str, list[dict]]:
+    """Fetch 6-month Redshift actuals history with a 1-hour cache."""
+    return fetch_bucket_history(month, year)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_forecast_history_cached(month_name: str, year: int) -> dict[str, list[dict]]:
+    """Load 6-month forecast history with a 1-hour cache."""
+    config = load_config("config.yaml")
+    return load_forecast_history(config, month_name, year)
+
+
+def _merge_history(
+    actuals_history: dict[str, list[dict]],
+    forecast_history: dict[str, list[dict]],
+    bucket_configs: list[dict],
+) -> dict[str, list[dict]]:
+    """Merge actuals and forecast history into a single structure per bucket.
+
+    Returns:
+        Dict keyed by bucket name. Each value is a list of dicts with
+        ``month_label``, ``actual``, and ``forecast`` keys.
+    """
+    merged: dict[str, list[dict]] = {}
+
+    for bucket in bucket_configs:
+        bucket_name = bucket["name"]
+        forecast_key = bucket["forecast_mapping_key"]
+
+        actual_list = actuals_history.get(bucket_name, [])
+        forecast_list = forecast_history.get(forecast_key, [])
+
+        # Build a lookup from month_label -> forecast value
+        fc_lookup: dict[str, float | None] = {}
+        for entry in forecast_list:
+            fc_lookup[entry["month_label"]] = entry.get("forecast")
+
+        combined: list[dict] = []
+        for entry in actual_list:
+            combined.append({
+                "month_label": entry["month_start"],
+                "actual": entry["actual"],
+                "forecast": fc_lookup.get(entry["month_start"]),
+            })
+
+        merged[bucket_name] = combined
+
+    return merged
+
+
 if generate_clicked:
     month_number_str: str = _month_name_to_padded_number(selected_month_name)
 
@@ -213,6 +265,38 @@ if generate_clicked:
         )
         st.write(f"Generated {len(narratives)} narrative(s)")
 
+        # -- Fetch 6-month history for trend charts ----------------------------
+        st.write("Fetching 6-month actuals history...")
+        t0 = time.perf_counter()
+        actuals_history = _fetch_history_cached(month_number_str, selected_year)
+        elapsed = time.perf_counter() - t0
+        cached_note = " *(cached)*" if elapsed < 0.5 else ""
+        st.write(f"Actuals history loaded{cached_note}")
+
+        st.write("Loading 6-month forecast history...")
+        t0 = time.perf_counter()
+        try:
+            forecast_history = _load_forecast_history_cached(
+                selected_month_name, selected_year
+            )
+            elapsed = time.perf_counter() - t0
+            cached_note = " *(cached)*" if elapsed < 0.5 else ""
+            st.write(f"Forecast history loaded{cached_note}")
+        except Exception:
+            st.write("Forecast history not available -- charts will show actuals only.")
+            forecast_history = {}
+
+        # Merge actuals + forecast history
+        chart_data = _merge_history(
+            actuals_history, forecast_history, config["buckets"]
+        )
+
+        # Render chart PNGs for the PPTX deck
+        st.write("Rendering trend charts...")
+        pptx_sections = config.get("pptx", {}).get("sections", [])
+        chart_images = build_all_trend_charts(chart_data, pptx_sections)
+        st.write(f"Rendered {len(chart_images)} trend chart(s)")
+
         status.update(
             label="Report generated!", state="complete", expanded=False
         )
@@ -223,6 +307,8 @@ if generate_clicked:
     st.session_state["config"] = config
     st.session_state["report_generated"] = True
     st.session_state["month_label"] = month_label
+    st.session_state["chart_data"] = chart_data
+    st.session_state["chart_images"] = chart_images
 
     # Initialise editable narrative keys (only on fresh generation)
     for bucket_name, text in narratives.items():
@@ -266,6 +352,14 @@ if st.session_state.get("report_generated"):
             fig = _build_bucket_chart(bucket_name, metrics)
             st.plotly_chart(fig, width="stretch")
 
+        # Trend chart (full-width below the narrative + bar chart)
+        chart_data = st.session_state.get("chart_data", {})
+        if bucket_name in chart_data:
+            trend_fig = build_trend_chart(
+                bucket_name, chart_data[bucket_name], dark_mode=False
+            )
+            st.plotly_chart(trend_fig, use_container_width=True)
+
     # -------------------------------------------------------------------
     # MCP Investigate widget
     # -------------------------------------------------------------------
@@ -307,6 +401,7 @@ if st.session_state.get("report_generated"):
                 st.session_state["all_metrics"],
                 st.session_state["config"],
                 month_label=st.session_state.get("month_label", ""),
+                chart_images=st.session_state.get("chart_images"),
             )
             return pptx_bytes
         except Exception as exc:
