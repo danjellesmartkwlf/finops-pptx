@@ -1,0 +1,309 @@
+# =============================================================================
+# slides_config.yaml
+# Flat, slide-by-slide configuration for the FinOps PowerPoint deck.
+# Each entry in "slides" produces one slide (or a paginated set for tables).
+# The renderer (pptx_gen.py) dispatches each entry by its "type" key.
+#
+# To add a slide: add an entry to the list below.
+# To remove a slide: delete or comment out its entry.
+# To reorder slides: move entries up or down in the list.
+# =============================================================================
+
+# Layout names (must match the slide-layout names inside the .pptx template)
+layouts:
+  title_slide: "Title Slide A"
+  transition: "Transition Slide B"
+  content: "Title, Body"
+  title_only: "Title Only"
+
+# =============================================================================
+# Slide sequence — processed top-to-bottom to build the deck.
+#
+# Supported types:
+#   title        — deck title slide (heading + subtitle)
+#   transition   — section divider slide
+#   content      — narrative text slide (looks up narrative by bucket)
+#   chart        — 6-month trend chart (skipped if no chart data for bucket)
+#   table        — paginated data table (auto-splits if >16 rows)
+#   split_table  — two tables stacked vertically on one slide
+#
+# Optional keys on any slide:
+#   requires     — dotted path that must be truthy to render (e.g. "app_data")
+# =============================================================================
+slides:
+
+  # --- Title Slide -----------------------------------------------------------
+  - type: title
+    layout: title_slide
+    heading: "Arctic Wolf AWS Cloud Cost Report"
+    subtitle: "FinOps Team | {month} {year}"
+
+  # ===========================================================================
+  # Total Spend
+  # ===========================================================================
+
+  - type: transition
+    layout: transition
+    title: "Arctic Wolf AWS Total Spend"
+
+  - type: content
+    layout: content
+    title: "Arctic Wolf AWS Total Spend"
+    bucket: "Total"
+
+  - type: chart
+    layout: title_only
+    title: "Arctic Wolf AWS Total Spend"
+    bucket: "Total"
+
+  # ===========================================================================
+  # COGS
+  # ===========================================================================
+
+  - type: transition
+    layout: transition
+    title: "Arctic Wolf AWS COGS"
+
+  - type: content
+    layout: content
+    title: "Arctic Wolf AWS COGS"
+    bucket: "COGS"
+
+  - type: chart
+    layout: title_only
+    title: "Arctic Wolf AWS COGS"
+    bucket: "COGS"
+
+  # ---------------------------------------------------------------------------
+  # COGS Breakdown Tables
+  # ---------------------------------------------------------------------------
+
+  - type: transition
+    layout: transition
+    title: "AWN COGS Breakdown"
+    requires: app_data
+
+  # Category rollup
+  - type: table
+    layout: title_only
+    title: "AWN COGS by Category"
+    requires: app_data
+    data_source: "app_data.category_rollup"
+    totals_source: "app_data.category_totals"
+    headers: ["Category", "Forecast", "Spend", "Change $", "Change %"]
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+    columns:
+      - field: category
+        format: raw
+      - field: forecast
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: var_change
+        format: abbreviated_currency
+      - field: var_pct
+        format: signed_percentage
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: forecast
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: var_change
+        format: abbreviated_currency
+      - field: var_pct
+        format: signed_percentage
+
+  # Spend vs Previous Month (MoM)
+  - type: table
+    layout: title_only
+    title: "AWN COGS Spend vs Previous Month"
+    requires: app_data
+    data_source: "app_data.app_metrics"
+    totals_source: "app_data.app_totals"
+    headers: ["App", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+    columns:
+      - field: app
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: mom_change
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: mom_change
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
+  # Forecast vs Spend
+  - type: table
+    layout: title_only
+    title: "AWN COGS Forecast vs Spend"
+    requires: app_data
+    data_source: "app_data.app_metrics"
+    totals_source: "app_data.app_totals"
+    headers: ["App", "Forecast", "Spend", "Change $", "Change %"]
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+    columns:
+      - field: app
+        format: raw
+      - field: forecast
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: var_change
+        format: abbreviated_currency
+      - field: var_pct
+        format: signed_percentage
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: forecast
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: var_change
+        format: abbreviated_currency
+      - field: var_pct
+        format: signed_percentage
+
+  # What Changed? (two tables on one slide)
+  - type: split_table
+    layout: title_only
+    title: "What Changed?"
+    requires: app_data
+    tables:
+      - position: upper
+        row_height_factor: 0.40
+        top: 1.4
+        gap_below: 0.8
+        data_source: "app_data.top_movers.increases"
+        headers: ["Top Increases vs Forecast", "Forecast", "Spend", "Change $", "Change %"]
+        col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+        font_size: 18
+        columns:
+          - field: app
+            format: raw
+          - field: forecast
+            format: abbreviated_currency
+          - field: current_month
+            format: abbreviated_currency
+          - field: var_change
+            format: abbreviated_currency
+          - field: var_pct
+            format: signed_percentage
+      - position: lower
+        row_height_factor: 0.40
+        data_source: "app_data.top_movers.decreases"
+        headers: ["Top Decreases vs Forecast", "Forecast", "Spend", "Change $", "Change %"]
+        col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+        font_size: 18
+        columns:
+          - field: app
+            format: raw
+          - field: forecast
+            format: abbreviated_currency
+          - field: current_month
+            format: abbreviated_currency
+          - field: var_change
+            format: abbreviated_currency
+          - field: var_pct
+            format: signed_percentage
+
+  # COGS Drill-Down: Top MoM Movers
+  - type: table
+    layout: title_only
+    title: "AWN COGS Drill-Down: Top MoM Movers"
+    requires: app_data.drilldown
+    data_source: "app_data.drilldown.drilldown_metrics"
+    totals_source: "app_data.drilldown.drilldown_totals"
+    headers: ["App | Service | Operation", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [4.5, 2.0, 2.0, 2.0, 1.8]
+    font_size: 11
+    columns:
+      - field: label
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+        fallback_field: mom_label
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
+  # EC2 RunInstances: Purchase Option Breakdown
+  - type: table
+    layout: title_only
+    title: "EC2 Instances: Purchase Option Breakdown"
+    requires: app_data.drilldown.ec2_metrics
+    data_source: "app_data.drilldown.ec2_metrics"
+    totals_source: "app_data.drilldown.ec2_totals"
+    headers: ["Purchase Option | Region", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [4.5, 2.0, 2.0, 2.0, 1.8]
+    font_size: 11
+    columns:
+      - field: label
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+        fallback_field: mom_label
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
+  # ===========================================================================
+  # OpEx
+  # ===========================================================================
+
+  - type: transition
+    layout: transition
+    title: "Arctic Wolf AWS OpEx"
+
+  - type: content
+    layout: content
+    title: "Arctic Wolf AWS OpEx"
+    bucket: "OpEx"
+
+  - type: chart
+    layout: title_only
+    title: "Arctic Wolf AWS OpEx"
+    bucket: "OpEx"
