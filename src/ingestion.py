@@ -389,6 +389,232 @@ def fetch_app_actuals(
 
 
 # ---------------------------------------------------------------------------
+# COGS drill-down (Phase 3)
+# ---------------------------------------------------------------------------
+
+def fetch_cogs_drilldown(
+    month: str,
+    year: int,
+    config_path: str = "config.yaml",
+) -> list[dict[str, Any]]:
+    """Fetch top COGS MoM movers broken down by awn_app, product_name, operation.
+
+    Uses a single-pass conditional SUM query for current + previous month,
+    filters to rows with ABS(delta) > noise_floor, ranks by ABS(delta),
+    and collapses the long tail into an "All Other" row.
+
+    Args:
+        month: Two-digit month string for the reporting month.
+        year: Four-digit reporting year.
+        config_path: Path to the YAML config file.
+
+    Returns:
+        A list of dicts sorted by ABS(delta_cost) DESC, each with:
+            - ``awn_app``, ``product_name``, ``operation``
+            - ``current_month``, ``previous_month``, ``delta_cost``
+    """
+    config = load_config(config_path)
+    dd_cfg = config.get("drilldown", {})
+    noise_floor = dd_cfg.get("noise_floor", 1000)
+    top_n = dd_cfg.get("top_n", 15)
+
+    source = dd_cfg.get("source", {})
+    table = source.get("table", "public.daily_cur_summary")
+    cost_column = source.get("cost_column", "cogs_adjusted_cost")
+    date_column = source.get("date_column", "usage_date")
+    filters: list[str] = source.get("filters", [])
+
+    prev_month, prev_year = _previous_month(month, year)
+
+    curr_filter = _build_month_filter(date_column, month, year)
+    prev_filter = _build_month_filter(date_column, prev_month, prev_year)
+
+    # Build the combined month filter
+    combined_month = (
+        f"({curr_filter} OR {prev_filter})"
+    )
+    where_parts = [combined_month] + list(filters)
+    where_clause = " AND ".join(where_parts)
+
+    sql = f"""
+WITH grouped AS (
+    SELECT
+        COALESCE(awn_app, 'Untagged') AS awn_app,
+        product_name,
+        operation,
+        SUM(CASE WHEN {curr_filter} THEN {cost_column} ELSE 0 END) AS current_month,
+        SUM(CASE WHEN {prev_filter} THEN {cost_column} ELSE 0 END) AS previous_month
+    FROM {table}
+    WHERE {where_clause}
+    GROUP BY COALESCE(awn_app, 'Untagged'), product_name, operation
+),
+filtered AS (
+    SELECT *,
+        current_month - previous_month AS delta_cost
+    FROM grouped
+    WHERE ABS(current_month - previous_month) > {noise_floor}
+),
+ranked AS (
+    SELECT *,
+        ROW_NUMBER() OVER (ORDER BY ABS(delta_cost) DESC) AS rn
+    FROM filtered
+),
+combined AS (
+    SELECT awn_app, product_name, operation, current_month, previous_month, delta_cost
+    FROM ranked
+    WHERE rn <= {top_n}
+
+    UNION ALL
+
+    SELECT
+        'All Other' AS awn_app,
+        '' AS product_name,
+        '' AS operation,
+        SUM(current_month) AS current_month,
+        SUM(previous_month) AS previous_month,
+        SUM(delta_cost) AS delta_cost
+    FROM ranked
+    WHERE rn > {top_n}
+    HAVING COUNT(*) > 0
+)
+SELECT awn_app, product_name, operation, current_month, previous_month, delta_cost
+FROM combined
+ORDER BY ABS(delta_cost) DESC
+"""
+
+    logger.debug("COGS drilldown SQL:\n%s", sql)
+    conn = get_shared_connection()
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        rows = cur.fetchall()
+
+    results: list[dict[str, Any]] = []
+    for row in rows:
+        results.append({
+            "awn_app": str(row[0]) if row[0] else "Untagged",
+            "product_name": str(row[1]) if row[1] else "",
+            "operation": str(row[2]) if row[2] else "",
+            "current_month": float(row[3]) if row[3] is not None else 0.0,
+            "previous_month": float(row[4]) if row[4] is not None else 0.0,
+            "delta_cost": float(row[5]) if row[5] is not None else 0.0,
+        })
+
+    logger.info("Fetched %d COGS drilldown rows", len(results))
+    return results
+
+
+def fetch_ec2_purchase_breakdown(
+    month: str,
+    year: int,
+    config_path: str = "config.yaml",
+) -> list[dict[str, Any]]:
+    """Fetch EC2 RunInstances MoM breakdown by purchase_option and region.
+
+    Same CTE pattern as :func:`fetch_cogs_drilldown` but filtered to the
+    configured EC2 product_name and operation, grouped by purchase_option
+    and region.
+
+    Args:
+        month: Two-digit month string for the reporting month.
+        year: Four-digit reporting year.
+        config_path: Path to the YAML config file.
+
+    Returns:
+        A list of dicts sorted by ABS(delta_cost) DESC, each with:
+            - ``purchase_option``, ``region``
+            - ``current_month``, ``previous_month``, ``delta_cost``
+    """
+    config = load_config(config_path)
+    dd_cfg = config.get("drilldown", {})
+    ec2_product = dd_cfg.get("ec2_product_name", "Elastic Compute Cloud")
+    ec2_operation = dd_cfg.get("ec2_operation", "RunInstances")
+    top_n = dd_cfg.get("top_n", 15)
+    ec2_noise_floor = 100  # Lower threshold for this filtered subset
+
+    source = dd_cfg.get("source", {})
+    table = source.get("table", "public.daily_cur_summary")
+    cost_column = source.get("cost_column", "cogs_adjusted_cost")
+    date_column = source.get("date_column", "usage_date")
+    filters: list[str] = source.get("filters", [])
+
+    prev_month, prev_year = _previous_month(month, year)
+
+    curr_filter = _build_month_filter(date_column, month, year)
+    prev_filter = _build_month_filter(date_column, prev_month, prev_year)
+
+    combined_month = f"({curr_filter} OR {prev_filter})"
+    where_parts = (
+        [combined_month]
+        + list(filters)
+        + [f"product_name = '{ec2_product}'", f"operation = '{ec2_operation}'"]
+    )
+    where_clause = " AND ".join(where_parts)
+
+    sql = f"""
+WITH grouped AS (
+    SELECT
+        purchase_option,
+        region,
+        SUM(CASE WHEN {curr_filter} THEN {cost_column} ELSE 0 END) AS current_month,
+        SUM(CASE WHEN {prev_filter} THEN {cost_column} ELSE 0 END) AS previous_month
+    FROM {table}
+    WHERE {where_clause}
+    GROUP BY purchase_option, region
+),
+filtered AS (
+    SELECT *,
+        current_month - previous_month AS delta_cost
+    FROM grouped
+    WHERE ABS(current_month - previous_month) > {ec2_noise_floor}
+),
+ranked AS (
+    SELECT *,
+        ROW_NUMBER() OVER (ORDER BY ABS(delta_cost) DESC) AS rn
+    FROM filtered
+),
+combined AS (
+    SELECT purchase_option, region, current_month, previous_month, delta_cost
+    FROM ranked
+    WHERE rn <= {top_n}
+
+    UNION ALL
+
+    SELECT
+        'All Other' AS purchase_option,
+        '' AS region,
+        SUM(current_month) AS current_month,
+        SUM(previous_month) AS previous_month,
+        SUM(delta_cost) AS delta_cost
+    FROM ranked
+    WHERE rn > {top_n}
+    HAVING COUNT(*) > 0
+)
+SELECT purchase_option, region, current_month, previous_month, delta_cost
+FROM combined
+ORDER BY ABS(delta_cost) DESC
+"""
+
+    logger.debug("EC2 purchase breakdown SQL:\n%s", sql)
+    conn = get_shared_connection()
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        rows = cur.fetchall()
+
+    results: list[dict[str, Any]] = []
+    for row in rows:
+        results.append({
+            "purchase_option": str(row[0]) if row[0] else "",
+            "region": str(row[1]) if row[1] else "",
+            "current_month": float(row[2]) if row[2] is not None else 0.0,
+            "previous_month": float(row[3]) if row[3] is not None else 0.0,
+            "delta_cost": float(row[4]) if row[4] is not None else 0.0,
+        })
+
+    logger.info("Fetched %d EC2 purchase breakdown rows", len(results))
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Historical data (6-month trend)
 # ---------------------------------------------------------------------------
 

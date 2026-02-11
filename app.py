@@ -19,6 +19,9 @@ import streamlit as st
 from src.app_data import (
     build_app_metrics,
     build_category_rollup,
+    build_drilldown_metrics,
+    build_ec2_purchase_metrics,
+    compute_drilldown_totals,
     compute_totals,
     find_top_movers,
     load_app_category_mapping,
@@ -26,7 +29,15 @@ from src.app_data import (
 from src.calculations import calculate_all_buckets
 from src.charts import build_all_trend_charts, build_trend_chart, render_chart_png
 from src.forecast import load_app_forecasts, load_forecast, load_forecast_history
-from src.ingestion import fetch_app_actuals, fetch_bucket_actuals, fetch_bucket_history, load_config, close_shared_connection
+from src.ingestion import (
+    fetch_app_actuals,
+    fetch_bucket_actuals,
+    fetch_bucket_history,
+    fetch_cogs_drilldown,
+    fetch_ec2_purchase_breakdown,
+    load_config,
+    close_shared_connection,
+)
 from src.narrative import generate_all_narratives
 
 atexit.register(close_shared_connection)
@@ -181,6 +192,18 @@ def _load_app_forecasts_cached(month_name: str, year: int) -> dict[str, float]:
     """Load per-app COGS forecasts with a 1-hour cache."""
     config = load_config("config.yaml")
     return load_app_forecasts(config, month_name, year)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_cogs_drilldown_cached(month: str, year: int) -> list[dict]:
+    """Fetch COGS drilldown rows with a 1-hour cache."""
+    return fetch_cogs_drilldown(month, year)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_ec2_purchase_cached(month: str, year: int) -> list[dict]:
+    """Fetch EC2 purchase breakdown rows with a 1-hour cache."""
+    return fetch_ec2_purchase_breakdown(month, year)
 
 
 def _merge_history(
@@ -349,6 +372,34 @@ if generate_clicked:
         }
         st.write(f"Built metrics for {len(app_metrics_list)} apps across {len(category_rollup)} categories")
 
+        # -- Phase 3: COGS drill-down ------------------------------------------
+        st.write("Fetching COGS drill-down data...")
+        t0 = time.perf_counter()
+        drilldown_raw = _fetch_cogs_drilldown_cached(month_number_str, selected_year)
+        elapsed = time.perf_counter() - t0
+        cached_note = " *(cached)*" if elapsed < 0.5 else ""
+        st.write(f"Drill-down loaded: {len(drilldown_raw)} rows{cached_note}")
+
+        drilldown_metrics = build_drilldown_metrics(drilldown_raw)
+        drilldown_totals = compute_drilldown_totals(drilldown_metrics)
+
+        st.write("Fetching EC2 purchase option breakdown...")
+        t0 = time.perf_counter()
+        ec2_raw = _fetch_ec2_purchase_cached(month_number_str, selected_year)
+        elapsed = time.perf_counter() - t0
+        cached_note = " *(cached)*" if elapsed < 0.5 else ""
+        st.write(f"EC2 breakdown loaded: {len(ec2_raw)} rows{cached_note}")
+
+        ec2_metrics = build_ec2_purchase_metrics(ec2_raw)
+        ec2_totals = compute_drilldown_totals(ec2_metrics)
+
+        app_data_dict["drilldown"] = {
+            "drilldown_metrics": drilldown_metrics,
+            "drilldown_totals": drilldown_totals,
+            "ec2_metrics": ec2_metrics,
+            "ec2_totals": ec2_totals,
+        }
+
         status.update(
             label="Report generated!", state="complete", expanded=False
         )
@@ -412,6 +463,68 @@ if st.session_state.get("report_generated"):
                 bucket_name, chart_data[bucket_name], dark_mode=False
             )
             st.plotly_chart(trend_fig, use_container_width=True)
+
+        # COGS drill-down section
+        if bucket_name == "COGS":
+            app_data = st.session_state.get("app_data", {})
+            dd = app_data.get("drilldown", {})
+            if dd.get("drilldown_metrics"):
+                with st.expander("COGS Drill-Down: Top MoM Movers", expanded=False):
+                    import pandas as pd
+
+                    dd_rows = []
+                    for m in dd["drilldown_metrics"]:
+                        pct_display = m["mom_label"] if m.get("mom_label") else f"{m['mom_pct']:+.1f}%"
+                        dd_rows.append({
+                            "App | Service | Operation": m["label"],
+                            "Previous Month": f"${m['previous_month']:,.0f}",
+                            "Current Month": f"${m['current_month']:,.0f}",
+                            "Change $": f"${m['delta_cost']:+,.0f}",
+                            "Change %": pct_display,
+                        })
+
+                    totals = dd["drilldown_totals"]
+                    dd_rows.append({
+                        "App | Service | Operation": "**Total**",
+                        "Previous Month": f"${totals['previous_month']:,.0f}",
+                        "Current Month": f"${totals['current_month']:,.0f}",
+                        "Change $": f"${totals['delta_cost']:+,.0f}",
+                        "Change %": f"{totals['mom_pct']:+.1f}%",
+                    })
+
+                    st.dataframe(
+                        pd.DataFrame(dd_rows),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                if dd.get("ec2_metrics"):
+                    with st.expander("EC2 RunInstances: Purchase Option Breakdown", expanded=False):
+                        ec2_rows = []
+                        for m in dd["ec2_metrics"]:
+                            pct_display = m["mom_label"] if m.get("mom_label") else f"{m['mom_pct']:+.1f}%"
+                            ec2_rows.append({
+                                "Purchase Option | Region": m["label"],
+                                "Previous Month": f"${m['previous_month']:,.0f}",
+                                "Current Month": f"${m['current_month']:,.0f}",
+                                "Change $": f"${m['delta_cost']:+,.0f}",
+                                "Change %": pct_display,
+                            })
+
+                        ec2_totals = dd["ec2_totals"]
+                        ec2_rows.append({
+                            "Purchase Option | Region": "**Total**",
+                            "Previous Month": f"${ec2_totals['previous_month']:,.0f}",
+                            "Current Month": f"${ec2_totals['current_month']:,.0f}",
+                            "Change $": f"${ec2_totals['delta_cost']:+,.0f}",
+                            "Change %": f"{ec2_totals['mom_pct']:+.1f}%",
+                        })
+
+                        st.dataframe(
+                            pd.DataFrame(ec2_rows),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
 
     # -------------------------------------------------------------------
     # MCP Investigate widget

@@ -286,3 +286,137 @@ def compute_totals(
         "var_change": var_change,
         "var_pct": var_pct,
     }
+
+
+# ---------------------------------------------------------------------------
+# COGS drill-down metrics (Phase 3)
+# ---------------------------------------------------------------------------
+
+_PRODUCT_NAME_ABBREVIATIONS: dict[str, str] = {
+    "Elastic Compute Cloud": "EC2",
+    "Simple Storage Service": "S3",
+}
+
+
+def build_drilldown_metrics(
+    drilldown_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Enrich raw drilldown rows with labels and MoM percentage.
+
+    Args:
+        drilldown_rows: Raw rows from :func:`fetch_cogs_drilldown`.
+
+    Returns:
+        A list of enriched dicts sorted by ABS(delta_cost) DESC, each with
+        additional keys: ``label``, ``mom_pct``, ``mom_label``.
+    """
+    metrics: list[dict[str, Any]] = []
+
+    for row in drilldown_rows:
+        parts = [row["awn_app"]]
+        if row.get("product_name"):
+            product_name = row["product_name"]
+            parts.append(
+                _PRODUCT_NAME_ABBREVIATIONS.get(product_name, product_name)
+            )
+        if row.get("operation"):
+            parts.append(row["operation"])
+        label = " | ".join(parts)
+
+        current = row["current_month"]
+        previous = row["previous_month"]
+        delta = row["delta_cost"]
+
+        mom_label: str | None = None
+        if previous == 0 and current > 0:
+            mom_label = "NEW"
+            mom_pct = 0.0
+        elif current == 0 and previous > 0:
+            mom_label = "REMOVED"
+            mom_pct = -100.0
+        elif previous != 0:
+            mom_pct = (delta / previous) * 100.0
+        else:
+            mom_pct = 0.0
+
+        metrics.append({
+            **row,
+            "label": label,
+            "mom_pct": mom_pct,
+            "mom_label": mom_label,
+        })
+
+    metrics.sort(key=lambda m: abs(m["delta_cost"]), reverse=True)
+    return metrics
+
+
+def build_ec2_purchase_metrics(
+    ec2_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Enrich raw EC2 purchase breakdown rows with labels and MoM percentage.
+
+    Args:
+        ec2_rows: Raw rows from :func:`fetch_ec2_purchase_breakdown`.
+
+    Returns:
+        A list of enriched dicts sorted by ABS(delta_cost) DESC, each with
+        additional keys: ``label``, ``mom_pct``, ``mom_label``.
+    """
+    metrics: list[dict[str, Any]] = []
+
+    for row in ec2_rows:
+        parts = [row["purchase_option"]] if row.get("purchase_option") else []
+        if row.get("region"):
+            parts.append(row["region"])
+        label = " | ".join(parts) if parts else "Other"
+
+        current = row["current_month"]
+        previous = row["previous_month"]
+        delta = row["delta_cost"]
+
+        mom_label: str | None = None
+        if previous == 0 and current > 0:
+            mom_label = "NEW"
+            mom_pct = 0.0
+        elif current == 0 and previous > 0:
+            mom_label = "REMOVED"
+            mom_pct = -100.0
+        elif previous != 0:
+            mom_pct = (delta / previous) * 100.0
+        else:
+            mom_pct = 0.0
+
+        metrics.append({
+            **row,
+            "label": label,
+            "mom_pct": mom_pct,
+            "mom_label": mom_label,
+        })
+
+    metrics.sort(key=lambda m: abs(m["delta_cost"]), reverse=True)
+    return metrics
+
+
+def compute_drilldown_totals(
+    rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compute totals across all drilldown/EC2 breakdown rows.
+
+    Args:
+        rows: List of enriched drilldown or EC2 metric dicts.
+
+    Returns:
+        A dict with ``current_month``, ``previous_month``, ``delta_cost``,
+        and ``mom_pct``.
+    """
+    total_current = sum(r["current_month"] for r in rows)
+    total_previous = sum(r["previous_month"] for r in rows)
+    total_delta = sum(r["delta_cost"] for r in rows)
+    mom_pct = (total_delta / total_previous * 100.0) if total_previous != 0 else 0.0
+
+    return {
+        "current_month": total_current,
+        "previous_month": total_previous,
+        "delta_cost": total_delta,
+        "mom_pct": mom_pct,
+    }

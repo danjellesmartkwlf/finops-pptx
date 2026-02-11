@@ -379,11 +379,16 @@ def _add_paginated_table_slides(
     data_rows: list[list[str]],
     total_row: list[str] | None = None,
     col_widths: list[float] | None = None,
+    font_size: int | None = None,
 ) -> None:
     """Add one or more slides with a paginated table.
 
     If data_rows exceeds ``_MAX_TABLE_ROWS_PER_SLIDE``, splits across
     multiple slides.  The total row only appears on the last slide.
+
+    Args:
+        font_size: Optional font size override in points. If None,
+            auto-computed from the per-page row count.
     """
     for page_start in range(0, max(len(data_rows), 1), _MAX_TABLE_ROWS_PER_SLIDE):
         page_rows = data_rows[page_start : page_start + _MAX_TABLE_ROWS_PER_SLIDE]
@@ -394,8 +399,8 @@ def _add_paginated_table_slides(
         slide = prs.slides.add_slide(layout)
         _set_text_by_idx(slide, 0, title)
 
-        # Font size is based on the number of rows on this specific page
-        page_font_size = _font_size_for_row_count(len(page_rows))
+        # Use explicit font_size if provided, otherwise auto-compute
+        page_font_size = font_size if font_size is not None else _font_size_for_row_count(len(page_rows))
 
         _build_table_on_slide(
             slide,
@@ -629,6 +634,87 @@ def _add_what_changed_slides(
 
 
 # ---------------------------------------------------------------------------
+# Phase 3: COGS drill-down slide builders
+# ---------------------------------------------------------------------------
+
+_DRILLDOWN_COL_WIDTHS = [4.5, 2.0, 2.0, 2.0, 1.8]
+
+
+def _add_drilldown_slides(
+    prs: Any,
+    layout: Any,
+    drilldown_metrics: list[dict],
+    drilldown_totals: dict,
+    month_label: str = "",
+) -> None:
+    """Add COGS Drill-Down slide(s) showing top MoM movers."""
+    prev_label, current_label = _compute_mom_headers(month_label)
+    headers = ["App | Service | Operation", prev_label, current_label, "Change $", "Change %"]
+
+    data_rows = []
+    for m in drilldown_metrics:
+        pct_display = m["mom_label"] if m.get("mom_label") else _fmt_pct(m["mom_pct"])
+        data_rows.append([
+            m["label"],
+            _fmt_abbreviated(m["previous_month"]),
+            _fmt_abbreviated(m["current_month"]),
+            _fmt_abbreviated(m["delta_cost"]),
+            pct_display,
+        ])
+
+    total_row = [
+        "Total",
+        _fmt_abbreviated(drilldown_totals["previous_month"]),
+        _fmt_abbreviated(drilldown_totals["current_month"]),
+        _fmt_abbreviated(drilldown_totals["delta_cost"]),
+        _fmt_pct(drilldown_totals["mom_pct"]),
+    ]
+
+    _add_paginated_table_slides(
+        prs, layout, "AWN COGS Drill-Down: Top MoM Movers",
+        headers, data_rows, total_row, _DRILLDOWN_COL_WIDTHS,
+        font_size=11,
+    )
+
+
+def _add_ec2_purchase_slides(
+    prs: Any,
+    layout: Any,
+    ec2_metrics: list[dict],
+    ec2_totals: dict,
+    month_label: str = "",
+) -> None:
+    """Add EC2 RunInstances purchase option breakdown slide(s)."""
+    prev_label, current_label = _compute_mom_headers(month_label)
+    headers = ["Purchase Option | Region", prev_label, current_label, "Change $", "Change %"]
+
+    data_rows = []
+    for m in ec2_metrics:
+        pct_display = m["mom_label"] if m.get("mom_label") else _fmt_pct(m["mom_pct"])
+        data_rows.append([
+            m["label"],
+            _fmt_abbreviated(m["previous_month"]),
+            _fmt_abbreviated(m["current_month"]),
+            _fmt_abbreviated(m["delta_cost"]),
+            pct_display,
+        ])
+
+    total_row = [
+        "Total",
+        _fmt_abbreviated(ec2_totals["previous_month"]),
+        _fmt_abbreviated(ec2_totals["current_month"]),
+        _fmt_abbreviated(ec2_totals["delta_cost"]),
+        _fmt_pct(ec2_totals["mom_pct"]),
+    ]
+
+    _add_paginated_table_slides(
+        prs, layout, "EC2 RunInstances: Purchase Option Breakdown",
+        headers, data_rows, total_row, _DRILLDOWN_COL_WIDTHS,
+        font_size=11,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -767,6 +853,23 @@ def generate_pptx(
                 prs, table_layout,
                 app_data["top_movers"],
             )
+
+            # Phase 3: COGS drill-down slides
+            if app_data.get("drilldown"):
+                dd = app_data["drilldown"]
+                _add_drilldown_slides(
+                    prs, table_layout,
+                    dd["drilldown_metrics"],
+                    dd["drilldown_totals"],
+                    month_label=month_label,
+                )
+                if dd.get("ec2_metrics"):
+                    _add_ec2_purchase_slides(
+                        prs, table_layout,
+                        dd["ec2_metrics"],
+                        dd["ec2_totals"],
+                        month_label=month_label,
+                    )
 
     # -- Serialize ---------------------------------------------------------
     buffer = BytesIO()

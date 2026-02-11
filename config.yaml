@@ -21,6 +21,24 @@ common_filters:
   - "service NOT LIKE 'Tackle%'"
 
 # ---------------------------------------------------------------------------
+# COGS drill-down configuration
+# Decomposes MoM changes by awn_app -> product_name -> operation
+# ---------------------------------------------------------------------------
+drilldown:
+  noise_floor: 1000
+  top_n: 15
+  ec2_product_name: "Elastic Compute Cloud"
+  ec2_operation: "RunInstances"
+  source:
+    table: public.daily_cur_summary
+    cost_column: cogs_adjusted_cost
+    date_column: usage_date
+    filters:
+      - "charge_type != 'Credit'"
+      - "service NOT LIKE 'Databrick%'"
+      - "service NOT LIKE 'Tackle%'"
+
+# ---------------------------------------------------------------------------
 # Always-OpEx services
 # These services are classified as OpEx regardless of the account they
 # appear in or any other tagging.

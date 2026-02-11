@@ -16,6 +16,9 @@ from pathlib import Path
 from src.app_data import (
     build_app_metrics,
     build_category_rollup,
+    build_drilldown_metrics,
+    build_ec2_purchase_metrics,
+    compute_drilldown_totals,
     compute_totals,
     find_top_movers,
     load_app_category_mapping,
@@ -28,6 +31,8 @@ from src.ingestion import (
     fetch_app_actuals,
     fetch_bucket_actuals,
     fetch_bucket_history,
+    fetch_cogs_drilldown,
+    fetch_ec2_purchase_breakdown,
     load_config,
 )
 from src.narrative import generate_all_narratives
@@ -141,7 +146,29 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         "category_totals": category_totals,
     }
 
-    # 7. Build PPTX
+    # 7. Phase 3: COGS drill-down
+    print("  Fetching COGS drill-down data ...")
+    drilldown_raw = fetch_cogs_drilldown(month_num, year)
+    print(f"    Found {len(drilldown_raw)} drill-down rows")
+
+    drilldown_metrics = build_drilldown_metrics(drilldown_raw)
+    drilldown_totals = compute_drilldown_totals(drilldown_metrics)
+
+    print("  Fetching EC2 purchase option breakdown ...")
+    ec2_raw = fetch_ec2_purchase_breakdown(month_num, year)
+    print(f"    Found {len(ec2_raw)} EC2 breakdown rows")
+
+    ec2_metrics = build_ec2_purchase_metrics(ec2_raw)
+    ec2_totals = compute_drilldown_totals(ec2_metrics)
+
+    app_data["drilldown"] = {
+        "drilldown_metrics": drilldown_metrics,
+        "drilldown_totals": drilldown_totals,
+        "ec2_metrics": ec2_metrics,
+        "ec2_totals": ec2_totals,
+    }
+
+    # 8. Build PPTX
     print("  Building PowerPoint ...")
     pptx_bytes = generate_pptx(
         narratives,
@@ -152,7 +179,7 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         app_data=app_data,
     )
 
-    # 8. Write file
+    # 9. Write file
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(pptx_bytes)
