@@ -14,21 +14,54 @@ from typing import Any
 
 import yaml
 from pptx import Presentation
+from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
-from pptx.util import Inches
+from pptx.util import Inches, Pt
 
 from src.pptx_utils import (
     add_paginated_table_slides,
     apply_table_style,
+    build_table_on_slide,
     compute_mom_headers,
     fmt_abbreviated,
+    fmt_abbreviated_signed,
+    fmt_abbreviated_signed_whole,
+    fmt_abbreviated_whole,
+    fmt_daily_rate,
+    fmt_daily_rate_signed,
+    fmt_obs_abbreviated,
     fmt_pct,
+    fmt_unit_cost,
     get_layout_by_name,
     remove_all_slides,
     resolve_template_path,
     set_cell,
     set_text_by_idx,
 )
+
+# ---------------------------------------------------------------------------
+# KPI grid constants
+# ---------------------------------------------------------------------------
+
+# Background color palette: [row][col] = RGBColor
+# Row 0 = AWN (blue), Row 1 = Cylance (teal), Row 2 = Totals (charcoal)
+# Col 2 (Total column) uses a slightly darker shade of its row color.
+_KPI_COLORS: list[list[RGBColor]] = [
+    [RGBColor(0x13, 0x55, 0xAA), RGBColor(0x17, 0x65, 0xBB), RGBColor(0x0C, 0x3F, 0x88)],
+    [RGBColor(0x00, 0x72, 0x64), RGBColor(0x00, 0x83, 0x74), RGBColor(0x00, 0x55, 0x4A)],
+    [RGBColor(0x34, 0x48, 0x54), RGBColor(0x42, 0x59, 0x66), RGBColor(0x1E, 0x2B, 0x33)],
+]
+
+_KPI_ROW_LABELS = ["AWN", "Cylance", "Total"]
+_KPI_COL_LABELS = ["AWS", "Databricks", "Total"]
+_KPI_WHITE = RGBColor(0xFF, 0xFF, 0xFF)
+_KPI_GREEN = RGBColor(0x00, 0xE6, 0x76)   # favorable (cost down)
+_KPI_ORANGE = RGBColor(0xFF, 0x9A, 0x3C)  # unfavorable (cost up)
+
+# Colors for the executive summary table
+_COLOR_YELLOW = RGBColor(0xFF, 0xFF, 0x00)   # previous month values
+_COLOR_GREEN = RGBColor(0x00, 0xB0, 0x50)    # favorable change (cost down)
+_COLOR_ORANGE = RGBColor(0xFF, 0x73, 0x0E)   # unfavorable change (cost up)
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +92,11 @@ def _load_slides_config(project_root: Path | None = None) -> dict[str, Any]:
 
 _FORMATTER_MAP: dict[str, Any] = {
     "abbreviated_currency": fmt_abbreviated,
+    "abbreviated_currency_whole": fmt_abbreviated_whole,
+    "signed_currency_whole": fmt_abbreviated_signed_whole,
     "signed_percentage": fmt_pct,
+    "unit_cost": fmt_unit_cost,
+    "obs_abbreviated": fmt_obs_abbreviated,
     "raw": None,
 }
 
@@ -305,7 +342,7 @@ def _handle_split_table(
     set_text_by_idx(slide, 0, slide_cfg.get("title", ""))
 
     tables_cfg = slide_cfg["tables"]
-    upper_bottom = Inches(1.4)  # tracks bottom edge for lower table placement
+    upper_bottom = 1.4  # tracks bottom edge (inches) for lower table placement
 
     for tbl_cfg in tables_cfg:
         data = _resolve_data_path(tbl_cfg["data_source"], context)
@@ -316,52 +353,363 @@ def _handle_split_table(
         if not data_rows:
             continue
 
-        headers = tbl_cfg["headers"]
-        col_widths = tbl_cfg.get("col_widths", [3.0, 2.3, 2.3, 2.3, 2.4])
-        font_size = tbl_cfg.get("font_size", 18)
-        row_height_factor = tbl_cfg.get("row_height_factor", 0.40)
-        n_rows = 1 + len(data_rows)
-        n_cols = len(headers)
+        headers = _resolve_headers(
+            tbl_cfg["headers"],
+            context.get("prev_month", ""),
+            context.get("curr_month", ""),
+        )
 
         if tbl_cfg["position"] == "upper":
-            tbl_top = Inches(tbl_cfg.get("top", 1.4))
+            tbl_top = tbl_cfg.get("top", 1.4)
         else:
             gap = tables_cfg[0].get("gap_below", 0.8)
-            tbl_top = upper_bottom + Inches(gap)
+            tbl_top = upper_bottom + gap
 
-        tbl_height = Inches(row_height_factor * n_rows)
-
-        shape = slide.shapes.add_table(
-            n_rows, n_cols, Inches(0.5), tbl_top, Inches(12.3), tbl_height,
+        _, bottom = build_table_on_slide(
+            slide,
+            headers,
+            data_rows,
+            col_widths=tbl_cfg.get("col_widths", [3.0, 2.3, 2.3, 2.3, 2.4]),
+            font_size=tbl_cfg.get("font_size", 18),
+            top_inches=tbl_top,
+            row_height_factor=tbl_cfg.get("row_height_factor", 0.40),
         )
-        table = shape.table
-        table._tbl.tblPr.set("firstRow", "1")
-        table._tbl.tblPr.set("lastRow", "0")
-        table._tbl.tblPr.set("bandRow", "1")
-        table._tbl.tblPr.set("bandCol", "0")
-        table._tbl.tblPr.set("firstCol", "1")
-        for i, w in enumerate(col_widths):
-            table.columns[i].width = Inches(w)
-
-        for col_idx, h in enumerate(headers):
-            align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
-            set_cell(
-                table.cell(0, col_idx), h,
-                font_size=font_size, bold=True, alignment=align,
-            )
-
-        for row_idx, row_data in enumerate(data_rows, start=1):
-            for col_idx, val in enumerate(row_data):
-                align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
-                set_cell(
-                    table.cell(row_idx, col_idx), val,
-                    font_size=font_size, alignment=align,
-                )
-
-        apply_table_style(table)
 
         if tbl_cfg["position"] == "upper":
-            upper_bottom = tbl_top + tbl_height
+            upper_bottom = bottom
+
+
+def _handle_history_table(
+    prs: Any,
+    slide_cfg: dict[str, Any],
+    layouts: dict[str, Any],
+    context: dict[str, Any],
+) -> None:
+    """Render a multi-month history table with colored MOM $ and MOM % columns.
+
+    Expects rows in ``data_source`` with keys ``app``, ``monthly_values``
+    (list of floats), ``mom_change``, and ``mom_pct``.  Month column headers
+    come from ``month_labels_source``.
+    """
+    if not _check_requires(slide_cfg.get("requires"), context):
+        return
+
+    layout = layouts.get(slide_cfg["layout"])
+    if layout is None:
+        return
+
+    rows_data = _resolve_data_path(slide_cfg["data_source"], context)
+    if not rows_data:
+        return
+
+    month_labels = _resolve_data_path(slide_cfg["month_labels_source"], context) or []
+    totals = (
+        _resolve_data_path(slide_cfg["totals_source"], context)
+        if slide_cfg.get("totals_source")
+        else None
+    )
+
+    col_widths: list[float] = slide_cfg.get(
+        "col_widths", [2.0, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.55, 1.55]
+    )
+    font_size: int = slide_cfg.get("font_size", 13)
+
+    slide = prs.slides.add_slide(layout)
+    set_text_by_idx(slide, 0, slide_cfg.get("title", ""))
+
+    headers = ["APPLICATION"] + list(month_labels) + ["MOM $", "MOM %"]
+    n_cols = len(headers)
+    n_data_rows = len(rows_data)
+    n_rows = 1 + n_data_rows + (1 if totals else 0)
+    col_widths = col_widths[:n_cols]
+
+    shape = slide.shapes.add_table(
+        n_rows,
+        n_cols,
+        Inches(0.5),
+        Inches(1.4),
+        Inches(12.3),
+        Inches(min(0.40 * n_rows, 5.8)),
+    )
+    table = shape.table
+
+    tbl_pr = table._tbl.tblPr
+    tbl_pr.set("firstRow", "1")
+    tbl_pr.set("lastRow", "1" if totals else "0")
+    tbl_pr.set("bandRow", "1")
+    tbl_pr.set("bandCol", "0")
+    tbl_pr.set("firstCol", "1")
+    for i, w in enumerate(col_widths):
+        table.columns[i].width = Inches(w)
+
+    # Header row
+    for col_idx, h in enumerate(headers):
+        align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+        set_cell(table.cell(0, col_idx), h, font_size=font_size, bold=True, alignment=align)
+
+    # Data rows
+    for row_idx, row in enumerate(rows_data, start=1):
+        monthly_values: list[float] = row.get("monthly_values", [])
+        mom_change: float = row.get("mom_change", 0.0)
+        mom_pct: float = row.get("mom_pct", 0.0)
+        mom_color = _COLOR_ORANGE if mom_change > 0 else _COLOR_GREEN
+
+        set_cell(
+            table.cell(row_idx, 0),
+            row.get("app", ""),
+            font_size=font_size,
+            alignment=PP_ALIGN.LEFT,
+        )
+        for mi, val in enumerate(monthly_values):
+            set_cell(
+                table.cell(row_idx, 1 + mi),
+                fmt_abbreviated(val),
+                font_size=font_size,
+                alignment=PP_ALIGN.RIGHT,
+            )
+        mom_col = 1 + len(monthly_values)
+        set_cell(
+            table.cell(row_idx, mom_col),
+            fmt_abbreviated_signed(mom_change),
+            font_size=font_size,
+            alignment=PP_ALIGN.RIGHT,
+            color=mom_color,
+        )
+        set_cell(
+            table.cell(row_idx, mom_col + 1),
+            fmt_pct(mom_pct),
+            font_size=font_size,
+            alignment=PP_ALIGN.RIGHT,
+            color=mom_color,
+        )
+
+    # Totals row
+    if totals:
+        t_idx = 1 + n_data_rows
+        monthly_values = totals.get("monthly_values", [])
+        mom_change = totals.get("mom_change", 0.0)
+        mom_pct = totals.get("mom_pct", 0.0)
+        mom_color = _COLOR_ORANGE if mom_change > 0 else _COLOR_GREEN
+
+        set_cell(
+            table.cell(t_idx, 0), "Total", font_size=font_size, bold=True, alignment=PP_ALIGN.LEFT
+        )
+        for mi, val in enumerate(monthly_values):
+            set_cell(
+                table.cell(t_idx, 1 + mi),
+                fmt_abbreviated(val),
+                font_size=font_size,
+                bold=True,
+                alignment=PP_ALIGN.RIGHT,
+            )
+        mom_col = 1 + len(monthly_values)
+        set_cell(
+            table.cell(t_idx, mom_col),
+            fmt_abbreviated_signed(mom_change),
+            font_size=font_size,
+            bold=True,
+            alignment=PP_ALIGN.RIGHT,
+            color=mom_color,
+        )
+        set_cell(
+            table.cell(t_idx, mom_col + 1),
+            fmt_pct(mom_pct),
+            font_size=font_size,
+            bold=True,
+            alignment=PP_ALIGN.RIGHT,
+            color=mom_color,
+        )
+
+    apply_table_style(table)
+
+
+def _handle_summary_table(
+    prs: Any,
+    slide_cfg: dict[str, Any],
+    layouts: dict[str, Any],
+    context: dict[str, Any],
+) -> None:
+    """Render the executive summary MoM table (COGS/OPEX/Grand Total + daily rates).
+
+    Expects ``context["summary_data"]`` to be populated by generate_report.py.
+    Columns: Metric | <two months ago> | <previous month (yellow)> | Change ($) | Change (%)
+    """
+    data_key = slide_cfg.get("data_key", "summary_data")
+    summary_data = context.get(data_key)
+    if not summary_data:
+        return
+
+    layout = layouts.get(slide_cfg["layout"])
+    if layout is None:
+        return
+
+    slide = prs.slides.add_slide(layout)
+    set_text_by_idx(slide, 0, slide_cfg.get("title", ""))
+
+    col_two = summary_data["col_older"]
+    col_prev = summary_data["col_newer"]
+    headers = ["Metric", col_two, col_prev, "Change ($)", "Change (%)"]
+    col_widths = slide_cfg.get("col_widths", [3.0, 2.3, 2.3, 2.3, 2.4])
+    font_size = slide_cfg.get("font_size", 20)
+    whole_numbers = slide_cfg.get("whole_numbers", False)
+    _fmt_currency = fmt_abbreviated_whole if whole_numbers else fmt_abbreviated
+    _fmt_currency_signed = fmt_abbreviated_signed_whole if whole_numbers else fmt_abbreviated_signed
+
+    rows_data = summary_data["rows"]
+    n_rows = 1 + len(rows_data)
+
+    shape = slide.shapes.add_table(
+        n_rows, 5,
+        Inches(0.5), Inches(1.4), Inches(12.3),
+        Inches(min(0.65 * n_rows, 5.8)),
+    )
+    table = shape.table
+
+    tbl_pr = table._tbl.tblPr
+    tbl_pr.set("firstRow", "1")
+    tbl_pr.set("lastRow", "0")
+    tbl_pr.set("bandRow", "1")
+    tbl_pr.set("bandCol", "0")
+    tbl_pr.set("firstCol", "1")
+    for i, w in enumerate(col_widths):
+        table.columns[i].width = Inches(w)
+
+    # Header row
+    for col_idx, h in enumerate(headers):
+        align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+        set_cell(table.cell(0, col_idx), h, font_size=font_size, bold=True, alignment=align)
+
+    # Data rows
+    for row_idx, row in enumerate(rows_data, start=1):
+        is_bold = row.get("is_bold", False)
+        row_type = row.get("row_type", "currency")
+        change_val = row["change_dollar"]
+
+        if row_type == "daily_rate":
+            two_fmt = fmt_daily_rate(row["older"])
+            prev_fmt = fmt_daily_rate(row["newer"])
+            change_dollar_fmt = fmt_daily_rate_signed(change_val)
+        else:
+            two_fmt = _fmt_currency(row["older"])
+            prev_fmt = _fmt_currency(row["newer"])
+            change_dollar_fmt = _fmt_currency_signed(change_val)
+
+        change_pct_fmt = fmt_pct(row["change_pct"])
+        change_color = _COLOR_ORANGE if change_val > 0 else _COLOR_GREEN
+
+        set_cell(table.cell(row_idx, 0), row["metric"], font_size=font_size, bold=is_bold, alignment=PP_ALIGN.LEFT)
+        set_cell(table.cell(row_idx, 1), two_fmt, font_size=font_size, bold=is_bold, alignment=PP_ALIGN.RIGHT)
+        set_cell(table.cell(row_idx, 2), prev_fmt, font_size=font_size, bold=is_bold, alignment=PP_ALIGN.RIGHT, color=_COLOR_YELLOW)
+        set_cell(table.cell(row_idx, 3), change_dollar_fmt, font_size=font_size, bold=is_bold, alignment=PP_ALIGN.RIGHT, color=change_color)
+        set_cell(table.cell(row_idx, 4), change_pct_fmt, font_size=font_size, bold=is_bold, alignment=PP_ALIGN.RIGHT, color=change_color)
+
+    apply_table_style(table)
+
+
+# ---------------------------------------------------------------------------
+# KPI grid slide renderer
+# ---------------------------------------------------------------------------
+
+def _render_kpi_grid(slide: Any, grid: list[list[dict]]) -> None:
+    """Draw a 3×3 KPI card grid onto *slide*.
+
+    *grid* is a 3-row × 3-col list of cell dicts with keys:
+    ``value``, ``prev``, ``change``, ``pct``.
+    """
+    left_margin = 0.4
+    top_margin = 1.3
+    total_w = 12.53
+    total_h = 5.9
+    gap = 0.12
+    card_w = (total_w - 2 * gap) / 3
+    card_h = (total_h - 2 * gap) / 3
+
+    for r in range(3):
+        for c in range(3):
+            cell = grid[r][c]
+            left = left_margin + c * (card_w + gap)
+            top = top_margin + r * (card_h + gap)
+            color = _KPI_COLORS[r][c]
+
+            value = cell["value"]
+            change = cell["change"]
+            pct = cell["pct"]
+
+            # Background card (filled rectangle, no visible border)
+            shape = slide.shapes.add_shape(
+                1,  # MSO_AUTO_SHAPE_TYPE.RECTANGLE
+                Inches(left), Inches(top), Inches(card_w), Inches(card_h),
+            )
+            shape.fill.solid()
+            shape.fill.fore_color.rgb = color
+            shape.line.color.rgb = color  # border matches fill → invisible
+
+            tf = shape.text_frame
+            tf.word_wrap = False
+            tf.margin_top = Inches(0.08)
+            tf.margin_bottom = Inches(0.05)
+            tf.margin_left = Inches(0.12)
+            tf.margin_right = Inches(0.08)
+
+            # Line 1: "AWN  ·  AWS" label (small, top-left)
+            p0 = tf.paragraphs[0]
+            p0.alignment = PP_ALIGN.LEFT
+            run0 = p0.add_run()
+            run0.text = f"{_KPI_ROW_LABELS[r]}  ·  {_KPI_COL_LABELS[c]}"
+            run0.font.size = Pt(11)
+            run0.font.bold = False
+            run0.font.color.rgb = _KPI_WHITE
+
+            # Line 2: main dollar value (large, centered)
+            p1 = tf.add_paragraph()
+            p1.alignment = PP_ALIGN.CENTER
+            p1.space_before = Pt(4)
+            run1 = p1.add_run()
+            run1.text = fmt_abbreviated(value)
+            run1.font.size = Pt(28)
+            run1.font.bold = True
+            run1.font.color.rgb = _KPI_WHITE
+
+            # Line 3: MoM delta (small, centered, color-coded)
+            p2 = tf.add_paragraph()
+            p2.alignment = PP_ALIGN.CENTER
+            p2.space_before = Pt(3)
+            run2 = p2.add_run()
+            sign_char = "▲" if change > 0 else ("▼" if change < 0 else "–")
+            run2.text = f"{sign_char} {fmt_abbreviated_signed(change)}  {fmt_pct(pct)}"
+            run2.font.size = Pt(12)
+            run2.font.bold = False
+            run2.font.color.rgb = _KPI_ORANGE if change > 0 else _KPI_GREEN
+
+
+def _handle_kpi_grid(
+    prs: Any,
+    slide_cfg: dict[str, Any],
+    layouts: dict[str, Any],
+    context: dict[str, Any],
+) -> None:
+    """Render a 3×3 KPI cost overview grid slide."""
+    if not _check_requires(slide_cfg.get("requires"), context):
+        return
+
+    kpi_grid_data = context.get("kpi_grid_data")
+    if not kpi_grid_data:
+        return
+
+    bucket = slide_cfg.get("bucket", "Total")
+    grid = kpi_grid_data.get(bucket)
+    if not grid:
+        return
+
+    layout = layouts.get(slide_cfg["layout"])
+    if layout is None:
+        return
+
+    slide = prs.slides.add_slide(layout)
+    fmt = context.get("fmt", {})
+    title = slide_cfg.get("title", "").format(**fmt)
+    set_text_by_idx(slide, 0, title)
+    _render_kpi_grid(slide, grid)
 
 
 # ---------------------------------------------------------------------------
@@ -375,6 +723,9 @@ _HANDLER_MAP: dict[str, Any] = {
     "chart": _handle_chart,
     "table": _handle_table,
     "split_table": _handle_split_table,
+    "summary_table": _handle_summary_table,
+    "history_table": _handle_history_table,
+    "kpi_grid": _handle_kpi_grid,
 }
 
 
@@ -405,6 +756,14 @@ def generate_pptx(
     project_root: Path | None = None,
     chart_images: dict[str, bytes] | None = None,
     app_data: dict[str, Any] | None = None,
+    summary_data: dict[str, Any] | None = None,
+    cylance_summary_data: dict[str, Any] | None = None,
+    cylance_dbx_summary_data: dict[str, Any] | None = None,
+    unit_cost_data: dict[str, Any] | None = None,
+    data_platform_data: dict[str, Any] | None = None,
+    dbx_data: dict[str, Any] | None = None,
+    dbx_summary_data: dict[str, Any] | None = None,
+    kpi_grid_data: dict[str, Any] | None = None,
 ) -> bytes:
     """Build a PowerPoint deck from ``slides_config.yaml`` definitions.
 
@@ -456,6 +815,14 @@ def generate_pptx(
         "month_label": month_label,
         "chart_images": chart_images,
         "app_data": app_data,
+        "summary_data": summary_data,
+        "cylance_summary_data": cylance_summary_data,
+        "cylance_dbx_summary_data": cylance_dbx_summary_data,
+        "unit_cost_data": unit_cost_data,
+        "data_platform_data": data_platform_data,
+        "dbx_data": dbx_data,
+        "dbx_summary_data": dbx_summary_data,
+        "kpi_grid_data": kpi_grid_data,
         "fmt": fmt,
         "prev_month": prev_month,
         "curr_month": curr_month,

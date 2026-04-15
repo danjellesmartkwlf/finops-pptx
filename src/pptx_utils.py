@@ -213,19 +213,95 @@ def set_text_by_idx(slide: Any, idx: int, text: str) -> bool:
 # Table helpers
 # ---------------------------------------------------------------------------
 
-def fmt_abbreviated(value: float | None) -> str:
-    """Format a dollar value with abbreviated suffix (K, M, B)."""
+def fmt_abbreviated(
+    value: float | None,
+    *,
+    signed: bool = False,
+    whole: bool = False,
+) -> str:
+    """Format a dollar value with abbreviated suffix (K, M, B).
+
+    Args:
+        value: The dollar amount. Returns "N/A" for None.
+        signed: If True, prefix positive values with "+".
+        whole: If True, round to whole numbers (e.g. "$5M" instead of "$5.81M").
+    """
+    if value is None:
+        return "N/A"
+    abs_val = abs(value)
+    if signed:
+        prefix = "+" if value > 0 else ("-" if value < 0 else "")
+    else:
+        prefix = "-" if value < 0 else ""
+    dec = "0" if whole else "2"
+    dec_k = "0" if whole else "1"
+    if abs_val >= 1_000_000_000:
+        return f"{prefix}${abs_val / 1_000_000_000:.{dec}f}B"
+    if abs_val >= 1_000_000:
+        return f"{prefix}${abs_val / 1_000_000:.{dec}f}M"
+    if abs_val >= 1_000:
+        return f"{prefix}${abs_val / 1_000:.{dec_k}f}K"
+    return f"{prefix}${abs_val:,.0f}"
+
+
+def fmt_abbreviated_signed(value: float | None) -> str:
+    """Format with abbreviated suffix and explicit +/- sign."""
+    return fmt_abbreviated(value, signed=True)
+
+
+def fmt_abbreviated_whole(value: float | None) -> str:
+    """Format with abbreviated suffix, rounded to whole numbers."""
+    return fmt_abbreviated(value, whole=True)
+
+
+def fmt_abbreviated_signed_whole(value: float | None) -> str:
+    """Format with abbreviated suffix, explicit +/- sign, rounded to whole."""
+    return fmt_abbreviated(value, signed=True, whole=True)
+
+
+def fmt_daily_rate(value: float | None) -> str:
+    """Format a dollar-per-day value (no sign prefix)."""
     if value is None:
         return "N/A"
     abs_val = abs(value)
     sign = "-" if value < 0 else ""
-    if abs_val >= 1_000_000_000:
-        return f"{sign}${abs_val / 1_000_000_000:.2f}B"
-    if abs_val >= 1_000_000:
-        return f"{sign}${abs_val / 1_000_000:.2f}M"
     if abs_val >= 1_000:
-        return f"{sign}${abs_val / 1_000:.1f}K"
-    return f"{sign}${abs_val:,.0f}"
+        return f"{sign}${abs_val / 1_000:.0f}K/day"
+    return f"{sign}${abs_val:.0f}/day"
+
+
+def fmt_daily_rate_signed(value: float | None) -> str:
+    """Format a dollar-per-day change value with explicit +/- sign."""
+    if value is None:
+        return "N/A"
+    abs_val = abs(value)
+    sign = "+" if value > 0 else ("-" if value < 0 else "")
+    if abs_val >= 1_000:
+        return f"{sign}${abs_val / 1_000:.0f}K/day"
+    return f"{sign}${abs_val:.0f}/day"
+
+
+def fmt_obs_abbreviated(value: float | int | None) -> str:
+    """Format an observation count with abbreviated suffix (B, T)."""
+    if value is None:
+        return "N/A"
+    v = float(value)
+    abs_val = abs(v)
+    sign = "-" if v < 0 else ""
+    if abs_val >= 1e12:
+        return f"{sign}{abs_val / 1e12:.2f}T"
+    if abs_val >= 1e9:
+        return f"{sign}{abs_val / 1e9:.1f}B"
+    if abs_val >= 1e6:
+        return f"{sign}{abs_val / 1e6:.0f}M"
+    return f"{sign}{abs_val:,.0f}"
+
+
+def fmt_unit_cost(value: float | None) -> str:
+    """Format a cost-per-1M value as '$X.XX'."""
+    if value is None:
+        return "N/A"
+    return f"${value:.2f}"
 
 
 def fmt_pct(value: float | None) -> str:
@@ -256,6 +332,7 @@ def set_cell(
     font_size: int = 18,
     bold: bool = False,
     alignment: Any = None,
+    color: RGBColor | None = None,
 ) -> None:
     """Write text into a table cell with formatting."""
     cell.text = ""
@@ -273,6 +350,8 @@ def set_cell(
     run.text = str(text)
     run.font.size = Pt(font_size)
     run.font.bold = bold
+    if color is not None:
+        run.font.color.rgb = color
 
 
 def font_size_for_row_count(data_row_count: int) -> int:
@@ -296,7 +375,9 @@ def build_table_on_slide(
     total_row: list[str] | None = None,
     col_widths: list[float] | None = None,
     font_size: int | None = None,
-) -> Any:
+    top_inches: float = 1.4,
+    row_height_factor: float = 0.32,
+) -> tuple[Any, float]:
     """Create a styled table on a slide.
 
     Args:
@@ -307,9 +388,12 @@ def build_table_on_slide(
         col_widths: Optional column widths in inches.
         font_size: Optional font size override. If None, auto-computed
             from the data row count.
+        top_inches: Top position in inches (default 1.4).
+        row_height_factor: Height per row in inches (default 0.32).
 
     Returns:
-        The python-pptx Table object.
+        A (table, bottom_inches) tuple — the python-pptx Table object and
+        the bottom edge position in inches.
     """
     n_rows = 1 + len(data_rows) + (1 if total_row else 0)
     n_cols = len(headers)
@@ -318,9 +402,9 @@ def build_table_on_slide(
         font_size = font_size_for_row_count(len(data_rows))
 
     left = Inches(0.5)
-    top = Inches(1.4)
+    top = Inches(top_inches)
     width = Inches(12.3)
-    height = Inches(min(0.32 * n_rows, 5.8))
+    height = Inches(min(row_height_factor * n_rows, 5.8))
 
     shape = slide.shapes.add_table(n_rows, n_cols, left, top, width, height)
     table = shape.table
@@ -358,7 +442,8 @@ def build_table_on_slide(
     # -- Apply Dark Style 1 - Accent 4 via built-in GUID --
     apply_table_style(table)
 
-    return table
+    bottom_inches = top_inches + min(row_height_factor * n_rows, 5.8)
+    return table, bottom_inches
 
 
 def add_paginated_table_slides(

@@ -3,6 +3,11 @@
 # Database credentials are stored in .env (never in this file).
 
 # ---------------------------------------------------------------------------
+# Global settings
+# ---------------------------------------------------------------------------
+lookback_months: 5   # Number of historical months shown on trend charts/tables
+
+# ---------------------------------------------------------------------------
 # Redshift table definitions
 # ---------------------------------------------------------------------------
 tables:
@@ -17,8 +22,9 @@ tables:
 # ---------------------------------------------------------------------------
 common_filters:
   - "charge_type != 'Credit'"
-  - "service NOT LIKE 'Databrick%'"
-  - "service NOT LIKE 'Tackle%'"
+  - "service NOT ILIKE 'Databrick%'"
+  - "service NOT ILIKE 'Tackle%'"
+  - "service NOT ILIKE 'Wiz%'"
 
 # ---------------------------------------------------------------------------
 # COGS drill-down configuration
@@ -35,8 +41,9 @@ drilldown:
     date_column: usage_date
     filters:
       - "charge_type != 'Credit'"
-      - "service NOT LIKE 'Databrick%'"
-      - "service NOT LIKE 'Tackle%'"
+      - "service NOT ILIKE 'Databrick%'"
+      - "service NOT ILIKE 'Tackle%'"
+      - "service NOT ILIKE 'Wiz%'"
 
 # ---------------------------------------------------------------------------
 # Always-OpEx services
@@ -71,8 +78,9 @@ buckets:
         date_column: usage_date
         filters:
           - "charge_type != 'Credit'"
-          - "service NOT LIKE 'Databrick%'"
-          - "service NOT LIKE 'Tackle%'"
+          - "service NOT ILIKE 'Databrick%'"
+          - "service NOT ILIKE 'Tackle%'"
+          - "service NOT ILIKE 'Wiz%'"
 
   # -- COGS ----------------------------------------------------------------
   - name: "COGS"
@@ -85,8 +93,9 @@ buckets:
         date_column: usage_date
         filters:
           - "charge_type != 'Credit'"
-          - "service NOT LIKE 'Databrick%'"
-          - "service NOT LIKE 'Tackle%'"
+          - "service NOT ILIKE 'Databrick%'"
+          - "service NOT ILIKE 'Tackle%'"
+          - "service NOT ILIKE 'Wiz%'"
 
   # -- OpEx ----------------------------------------------------------------
   - name: "OpEx"
@@ -99,8 +108,9 @@ buckets:
         date_column: usage_date
         filters:
           - "charge_type != 'Credit'"
-          - "service NOT LIKE 'Databrick%'"
-          - "service NOT LIKE 'Tackle%'"
+          - "service NOT ILIKE 'Databrick%'"
+          - "service NOT ILIKE 'Tackle%'"
+          - "service NOT ILIKE 'Wiz%'"
 
 # ---------------------------------------------------------------------------
 # Narrative templates

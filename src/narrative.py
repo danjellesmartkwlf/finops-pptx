@@ -12,29 +12,7 @@ from __future__ import annotations
 
 import calendar
 
-
-# ---------------------------------------------------------------------------
-# Dollar formatting
-# ---------------------------------------------------------------------------
-
-def _format_dollars(value: float) -> str:
-    """Format a dollar value with an M or K suffix.
-
-    Examples:
-        5_810_000  -> "$5.81M"
-        242_100    -> "$242.1K"
-        950        -> "$950.00"
-    """
-    abs_val = abs(value)
-    if abs_val >= 1_000_000:
-        formatted = f"${abs_val / 1_000_000:,.2f}M"
-    elif abs_val >= 1_000:
-        formatted = f"${abs_val / 1_000:,.1f}K"
-    else:
-        formatted = f"${abs_val:,.2f}"
-    if value < 0:
-        formatted = f"-{formatted}"
-    return formatted
+from src.pptx_utils import fmt_abbreviated as _format_dollars
 
 
 # ---------------------------------------------------------------------------

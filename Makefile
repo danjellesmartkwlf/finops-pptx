@@ -6,8 +6,12 @@ help: ## Show this help
 run: ## Launch the Streamlit UI
 	uv run streamlit run app.py
 
-report: ## Generate PPTX report (no UI). Usage: make report [MONTH=January] [YEAR=2026]
-	uv run python generate_report.py -m $(or $(MONTH),January) -y $(or $(YEAR),2026)
+PREV_MONTH := $(shell date -v-1m +%B)
+PREV_YEAR  := $(shell date -v-1m +%Y)
+
+report: ## Generate PPTX report (no UI). Usage: make report [MONTH=March] [YEAR=2026]
+	@OUT=$$(uv run python generate_report.py -m $(or $(MONTH),$(PREV_MONTH)) -y $(or $(YEAR),$(PREV_YEAR)) | tee /dev/tty | grep "^Done! Saved to" | sed 's/Done! Saved to //'); \
+	open "$$OUT"
 
 check-db: ## Test Redshift connectivity
 	uv run python -c "from src.ingestion import get_redshift_connection; conn = get_redshift_connection(); cur = conn.cursor(); cur.execute('SELECT 1'); print('Redshift connection: OK'); conn.close()"

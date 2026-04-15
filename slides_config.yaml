@@ -38,6 +38,49 @@ slides:
     heading: "Arctic Wolf AWS Cloud Cost Report"
     subtitle: "FinOps Team | {month} {year}"
 
+  # --- Executive Summary Tables ----------------------------------------------
+  - type: summary_table
+    layout: title_only
+    title: "Arctic Wolf AWS: MoM Cost Comparison"
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+    font_size: 20
+
+  - type: summary_table
+    layout: title_only
+    title: "Cylance AWS: MoM Cost Comparison"
+    data_key: "cylance_summary_data"
+    whole_numbers: true
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+    font_size: 20
+
+  - type: summary_table
+    layout: title_only
+    title: "AWN Databricks: MoM Cost Comparison"
+    data_key: "dbx_summary_data"
+    whole_numbers: true
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+    font_size: 20
+
+  # --- KPI Cost Overview Grids (3x3: AWN/Cylance/Total × AWS/Databricks/Total) ---
+
+  - type: kpi_grid
+    layout: title_only
+    title: "Cost Overview: COGS — {month} {year}"
+    bucket: "COGS"
+    requires: kpi_grid_data
+
+  - type: kpi_grid
+    layout: title_only
+    title: "Cost Overview: OpEx — {month} {year}"
+    bucket: "OpEx"
+    requires: kpi_grid_data
+
+  - type: kpi_grid
+    layout: title_only
+    title: "Cost Overview: Total — {month} {year}"
+    bucket: "Total"
+    requires: kpi_grid_data
+
   # ===========================================================================
   # Total Spend
   # ===========================================================================
@@ -71,6 +114,11 @@ slides:
 
   - type: chart
     layout: title_only
+    title: "AWN COGS by Application"
+    bucket: "COGS_app_breakdown"
+
+  - type: chart
+    layout: title_only
     title: "Arctic Wolf AWS COGS"
     bucket: "COGS"
 
@@ -83,10 +131,42 @@ slides:
     title: "AWN COGS Breakdown"
     requires: app_data
 
-  # Category rollup
+  # Category rollup — MoM
   - type: table
     layout: title_only
-    title: "AWN COGS by Category"
+    title: "AWN COGS by Category: MoM"
+    requires: app_data
+    data_source: "app_data.category_rollup"
+    totals_source: "app_data.category_totals"
+    headers: ["Category", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+    columns:
+      - field: category
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: mom_change
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: mom_change
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
+  # Category rollup — Forecast
+  - type: table
+    layout: title_only
+    title: "AWN COGS by Category: Forecast"
     requires: app_data
     data_source: "app_data.category_rollup"
     totals_source: "app_data.category_totals"
@@ -179,10 +259,53 @@ slides:
       - field: var_pct
         format: signed_percentage
 
-  # What Changed? (two tables on one slide)
+  # What Changed? — MoM (two tables on one slide)
   - type: split_table
     layout: title_only
     title: "What Changed?"
+    requires: app_data
+    tables:
+      - position: upper
+        row_height_factor: 0.40
+        top: 1.4
+        gap_below: 0.8
+        data_source: "app_data.top_movers_mom.increases"
+        headers: ["Top Increases vs Previous Month", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+        col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+        font_size: 18
+        columns:
+          - field: app
+            format: raw
+          - field: previous_month
+            format: abbreviated_currency_whole
+          - field: current_month
+            format: abbreviated_currency_whole
+          - field: mom_change
+            format: signed_currency_whole
+          - field: mom_pct
+            format: signed_percentage
+      - position: lower
+        row_height_factor: 0.40
+        data_source: "app_data.top_movers_mom.decreases"
+        headers: ["Top Decreases vs Previous Month", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+        col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+        font_size: 18
+        columns:
+          - field: app
+            format: raw
+          - field: previous_month
+            format: abbreviated_currency_whole
+          - field: current_month
+            format: abbreviated_currency_whole
+          - field: mom_change
+            format: signed_currency_whole
+          - field: mom_pct
+            format: signed_percentage
+
+  # What Changed? — Forecast (two tables on one slide)
+  - type: split_table
+    layout: title_only
+    title: "What Changed? (Forecast)"
     requires: app_data
     tables:
       - position: upper
@@ -197,11 +320,11 @@ slides:
           - field: app
             format: raw
           - field: forecast
-            format: abbreviated_currency
+            format: abbreviated_currency_whole
           - field: current_month
-            format: abbreviated_currency
+            format: abbreviated_currency_whole
           - field: var_change
-            format: abbreviated_currency
+            format: signed_currency_whole
           - field: var_pct
             format: signed_percentage
       - position: lower
@@ -214,11 +337,11 @@ slides:
           - field: app
             format: raw
           - field: forecast
-            format: abbreviated_currency
+            format: abbreviated_currency_whole
           - field: current_month
-            format: abbreviated_currency
+            format: abbreviated_currency_whole
           - field: var_change
-            format: abbreviated_currency
+            format: signed_currency_whole
           - field: var_pct
             format: signed_percentage
 
@@ -268,6 +391,249 @@ slides:
     font_size: 11
     columns:
       - field: label
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+        fallback_field: mom_label
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
+  # ===========================================================================
+  # COGS Unit Economics
+  # ===========================================================================
+
+  - type: transition
+    layout: transition
+    title: "COGS Unit Economics"
+    requires: unit_cost_data
+
+  - type: chart
+    layout: title_only
+    title: "COGS vs Analyzed Observations"
+    bucket: "unit_cost_overview"
+    requires: unit_cost_data
+
+  - type: chart
+    layout: title_only
+    title: "Cost per 1M Analyzed Observations"
+    bucket: "cost_per_1m_trend"
+    requires: unit_cost_data
+
+  - type: table
+    layout: title_only
+    title: "Pod Unit Economics: MoM Comparison"
+    requires: unit_cost_data
+    data_source: "unit_cost_data.pod_mom"
+    headers: ["Pod", "COGS", "COGS MoM", "Analyzed Obs", "Obs MoM", "Cost/1M", "Cost/1M MoM"]
+    col_widths: [1.6, 1.8, 1.6, 2.0, 1.6, 1.6, 1.6]
+    font_size: 16
+    columns:
+      - field: pod
+        format: raw
+      - field: curr_cogs
+        format: abbreviated_currency
+      - field: cogs_pct
+        format: signed_percentage
+      - field: curr_obs
+        format: obs_abbreviated
+      - field: obs_pct
+        format: signed_percentage
+      - field: curr_unit_cost
+        format: unit_cost
+      - field: unit_cost_pct
+        format: signed_percentage
+
+  - type: chart
+    layout: title_only
+    title: "Cost per 1M Analyzed by Pod"
+    bucket: "pod_unit_cost_trend"
+    requires: unit_cost_data
+
+  # ===========================================================================
+  # Data Platform
+  # ===========================================================================
+
+  - type: transition
+    layout: transition
+    title: "Data Platform"
+    requires: data_platform_data
+
+  - type: chart
+    layout: title_only
+    title: "Data Platform: Total Monthly Spend"
+    bucket: "data_platform_total"
+    requires: data_platform_data
+
+  - type: chart
+    layout: title_only
+    title: "Data Platform: Spend by Application"
+    bucket: "data_platform_stacked"
+    requires: data_platform_data
+
+  - type: history_table
+    layout: title_only
+    title: "Data Platform: Application Spend"
+    requires: data_platform_data
+    data_source: "data_platform_data.table_rows"
+    month_labels_source: "data_platform_data.month_labels"
+    totals_source: "data_platform_data.table_totals"
+    col_widths: [2.0, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.55, 1.55]
+    font_size: 13
+
+  # ===========================================================================
+  # AWN Databricks Spend
+  # ===========================================================================
+
+  - type: transition
+    layout: transition
+    title: "AWN Databricks Spend"
+    requires: dbx_data
+
+  - type: summary_table
+    layout: title_only
+    title: "AWN Databricks: MoM Cost Comparison"
+    data_key: "dbx_summary_data"
+    whole_numbers: true
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+    font_size: 20
+
+  - type: summary_table
+    layout: title_only
+    title: "Cylance Databricks: MoM Cost Comparison"
+    data_key: "cylance_dbx_summary_data"
+    whole_numbers: true
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+    font_size: 20
+
+  # COGS by Workspace
+  - type: table
+    layout: title_only
+    title: "AWN Databricks COGS by Workspace"
+    requires: dbx_data.cogs_by_workspace
+    data_source: "dbx_data.cogs_by_workspace"
+    totals_source: "dbx_data.cogs_by_workspace_totals"
+    headers: ["Workspace", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [4.0, 2.0, 2.0, 2.0, 2.3]
+    font_size: 14
+    columns:
+      - field: dimension_value
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+        fallback_field: mom_label
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
+  # COGS by SKU
+  - type: table
+    layout: title_only
+    title: "AWN Databricks COGS by SKU"
+    requires: dbx_data.cogs_by_sku
+    data_source: "dbx_data.cogs_by_sku"
+    totals_source: "dbx_data.cogs_by_sku_totals"
+    headers: ["SKU", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [4.0, 2.0, 2.0, 2.0, 2.3]
+    font_size: 14
+    columns:
+      - field: dimension_value
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+        fallback_field: mom_label
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
+  # OpEx by Workspace
+  - type: table
+    layout: title_only
+    title: "AWN Databricks OpEx by Workspace"
+    requires: dbx_data.opex_by_workspace
+    data_source: "dbx_data.opex_by_workspace"
+    totals_source: "dbx_data.opex_by_workspace_totals"
+    headers: ["Workspace", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [4.0, 2.0, 2.0, 2.0, 2.3]
+    font_size: 14
+    columns:
+      - field: dimension_value
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+        fallback_field: mom_label
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
+  # OpEx by SKU
+  - type: table
+    layout: title_only
+    title: "AWN Databricks OpEx by SKU"
+    requires: dbx_data.opex_by_sku
+    data_source: "dbx_data.opex_by_sku"
+    totals_source: "dbx_data.opex_by_sku_totals"
+    headers: ["SKU", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [4.0, 2.0, 2.0, 2.0, 2.3]
+    font_size: 14
+    columns:
+      - field: dimension_value
         format: raw
       - field: previous_month
         format: abbreviated_currency

@@ -236,6 +236,37 @@ def find_top_movers(
     }
 
 
+def find_top_movers_mom(
+    app_metrics: list[dict[str, Any]],
+    n: int = 3,
+) -> dict[str, list[dict[str, Any]]]:
+    """Identify the top N apps with largest MoM spend changes.
+
+    Args:
+        app_metrics: Per-app metrics from :func:`build_app_metrics`.
+        n: Number of top movers in each direction (default 3).
+
+    Returns:
+        A dict with keys ``"increases"`` and ``"decreases"``, each a list
+        of app metric dicts sorted by absolute MoM dollar change.
+    """
+    increases = sorted(
+        [m for m in app_metrics if m["mom_change"] > 0],
+        key=lambda m: m["mom_change"],
+        reverse=True,
+    )[:n]
+
+    decreases = sorted(
+        [m for m in app_metrics if m["mom_change"] < 0],
+        key=lambda m: m["mom_change"],
+    )[:n]
+
+    return {
+        "increases": increases,
+        "decreases": decreases,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Totals row builder
 # ---------------------------------------------------------------------------
@@ -394,6 +425,151 @@ def build_ec2_purchase_metrics(
         })
 
     metrics.sort(key=lambda m: abs(m["delta_cost"]), reverse=True)
+    return metrics
+
+
+# ---------------------------------------------------------------------------
+# Data Platform drill-down
+# ---------------------------------------------------------------------------
+
+def build_data_platform_data(
+    app_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build Data Platform table and chart data from filtered app-level COGS history.
+
+    Args:
+        app_history: Rows from ``fetch_app_cogs_history()`` already filtered
+            to Data Platform apps. Each dict has keys ``app_name``,
+            ``month_label``, and ``monthly_cost``.
+
+    Returns:
+        A dict with keys:
+            - ``table_rows``: per-app dicts with ``app``, ``monthly_values``,
+              ``mom_change``, and ``mom_pct``.
+            - ``month_labels``: list of formatted label strings (e.g. ``"SEP-2025"``).
+            - ``table_totals``: totals row dict.
+            - ``total_history``: chronological list of ``{month_label, actual,
+              forecast}`` dicts suitable for ``build_trend_chart()``.
+    """
+    from collections import defaultdict
+
+    if not app_history:
+        return {}
+
+    # Determine chronological month order from the data
+    month_order: list[str] = []
+    seen: set[str] = set()
+    for row in app_history:
+        if row["month_label"] not in seen:
+            month_order.append(row["month_label"])
+            seen.add(row["month_label"])
+
+    def _format_month_label(label: str) -> str:
+        """Convert "Sep 2025" -> "SEP-2025"."""
+        parts = label.split()
+        if len(parts) == 2:
+            return f"{parts[0].upper()}-{parts[1]}"
+        return label.upper()
+
+    formatted_month_labels = [_format_month_label(m) for m in month_order]
+
+    # Pivot: app_name -> month_label -> cost
+    app_month_cost: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for row in app_history:
+        app_month_cost[row["app_name"]][row["month_label"]] += row["monthly_cost"]
+
+    # Build per-app rows
+    table_rows: list[dict[str, Any]] = []
+    for app_name in sorted(app_month_cost.keys()):
+        monthly_values = [app_month_cost[app_name].get(m, 0.0) for m in month_order]
+        current = monthly_values[-1] if monthly_values else 0.0
+        previous = monthly_values[-2] if len(monthly_values) >= 2 else 0.0
+        mom_change = current - previous
+        mom_pct = (mom_change / previous * 100.0) if previous != 0 else 0.0
+
+        table_rows.append({
+            "app": app_name,
+            "monthly_values": monthly_values,
+            "mom_change": mom_change,
+            "mom_pct": mom_pct,
+        })
+
+    # Sort by current-month spend descending
+    table_rows.sort(
+        key=lambda r: r["monthly_values"][-1] if r["monthly_values"] else 0.0,
+        reverse=True,
+    )
+
+    # Compute column totals
+    n_months = len(month_order)
+    total_monthly = [
+        sum(r["monthly_values"][i] for r in table_rows if i < len(r["monthly_values"]))
+        for i in range(n_months)
+    ]
+    total_current = total_monthly[-1] if total_monthly else 0.0
+    total_previous = total_monthly[-2] if len(total_monthly) >= 2 else 0.0
+    total_mom_change = total_current - total_previous
+    total_mom_pct = (total_mom_change / total_previous * 100.0) if total_previous != 0 else 0.0
+
+    table_totals: dict[str, Any] = {
+        "app": "Total",
+        "monthly_values": total_monthly,
+        "mom_change": total_mom_change,
+        "mom_pct": total_mom_pct,
+    }
+
+    # Build chronological total history for the line chart
+    total_history = [
+        {"month_label": m, "actual": v, "forecast": None}
+        for m, v in zip(month_order, total_monthly)
+    ]
+
+    return {
+        "table_rows": table_rows,
+        "month_labels": formatted_month_labels,
+        "table_totals": table_totals,
+        "total_history": total_history,
+    }
+
+
+def build_dbx_breakdown_metrics(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Enrich raw Databricks breakdown rows with MoM percentage.
+
+    Args:
+        rows: Raw rows from :func:`fetch_dbx_awn_breakdown`.
+
+    Returns:
+        A list of enriched dicts sorted by current_month DESC, each with
+        additional keys: ``mom_pct``, ``mom_label``.
+    """
+    metrics: list[dict[str, Any]] = []
+
+    for row in rows:
+        current = row["current_month"]
+        previous = row["previous_month"]
+        delta = row["delta_cost"]
+
+        mom_label: str | None = None
+        if previous == 0 and current > 0:
+            mom_label = "NEW"
+            mom_pct = 0.0
+        elif current == 0 and previous > 0:
+            mom_label = "REMOVED"
+            mom_pct = -100.0
+        elif previous != 0:
+            mom_pct = (delta / previous) * 100.0
+        else:
+            mom_pct = 0.0
+
+        metrics.append({
+            **row,
+            "mom_pct": mom_pct,
+            "mom_label": mom_label,
+        })
+
+    metrics.sort(key=lambda m: m["current_month"], reverse=True)
     return metrics
 
 

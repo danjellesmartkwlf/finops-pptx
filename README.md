@@ -8,14 +8,12 @@ Automates the monthly executive cloud cost presentation for Arctic Wolf. Replace
 2. **Ingests forecasts** from Excel files (separate files for COGS and OpEx).
 3. **Calculates** Month-over-Month and Forecast Variance for Total, COGS, and OpEx buckets.
 4. **Generates narrative text** from pre-approved templates (Mode A with forecast variance, Mode B with MoM only).
-5. **Provides a Streamlit UI** ("The Cockpit") for reviewing data, editing narratives, and visualizing charts.
-6. **Exports a PowerPoint deck** using the corporate template.
+5. **Exports a PowerPoint deck** using the corporate template.
 
 ## Tech Stack
 
 - Python 3.12
 - UV (package management)
-- Streamlit (UI)
 - psycopg2-binary (Redshift)
 - python-pptx (PowerPoint generation)
 - openpyxl (Excel ingestion)
@@ -27,7 +25,8 @@ Automates the monthly executive cloud cost presentation for Arctic Wolf. Replace
 
 ```
 config.yaml                # Bucket definitions, SQL logic, templates, file paths
-app.py                     # Streamlit UI entry point
+slides_config.yaml         # Slide sequence and layout definitions
+generate_report.py         # CLI entry point (defaults to previous month)
 src/
   ingestion.py             # Redshift connection and data loading
   forecast.py              # Excel forecast ingestion and validation
@@ -63,16 +62,22 @@ pptx_template/             # Corporate PowerPoint template
 
 ## Usage
 
-Run the Streamlit UI:
+Generate a report for the previous month (default):
 
 ```
-uv run streamlit run app.py
+uv run python generate_report.py
 ```
 
-Test Redshift connectivity:
+Specify a month and year:
 
 ```
-make check-db
+uv run python generate_report.py --month February --year 2026
+```
+
+Custom output path:
+
+```
+uv run python generate_report.py -o my_report.pptx
 ```
 
 ## Configuration
