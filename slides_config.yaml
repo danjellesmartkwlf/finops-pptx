@@ -259,6 +259,13 @@ slides:
       - field: var_pct
         format: signed_percentage
 
+  # COGS Forecast Variance — grouped by category with subtotals and color coding
+  - type: cogs_forecast_variance
+    layout: title_only
+    requires: app_data
+    font_size: 16
+    col_widths: [3.0, 2.3, 2.3, 2.3, 2.4]
+
   # What Changed? — MoM (two tables on one slide)
   - type: split_table
     layout: title_only
@@ -413,6 +420,74 @@ slides:
       - field: mom_pct
         format: signed_percentage
 
+  # 'Other' App Drill-Down: by Service
+  - type: table
+    layout: title_only
+    title: "AWN COGS 'Other' App: Spend by Service"
+    requires: other_app_data.by_service
+    data_source: "other_app_data.by_service"
+    totals_source: "other_app_data.by_service_totals"
+    headers: ["Service", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [4.5, 2.0, 2.0, 2.0, 1.8]
+    font_size: 12
+    columns:
+      - field: dimension_value
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+        fallback_field: mom_label
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
+  # 'Other' App Drill-Down: by EKS Cluster
+  - type: table
+    layout: title_only
+    title: "AWN COGS 'Other' App: Spend by EKS Cluster"
+    requires: other_app_data.by_eks_cluster
+    data_source: "other_app_data.by_eks_cluster"
+    totals_source: "other_app_data.by_eks_cluster_totals"
+    headers: ["EKS Cluster", "{prev_month}", "{curr_month}", "Change $", "Change %"]
+    col_widths: [4.5, 2.0, 2.0, 2.0, 1.8]
+    font_size: 12
+    columns:
+      - field: dimension_value
+        format: raw
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+        fallback_field: mom_label
+    totals_columns:
+      - field: null
+        text: "Total"
+      - field: previous_month
+        format: abbreviated_currency
+      - field: current_month
+        format: abbreviated_currency
+      - field: delta_cost
+        format: abbreviated_currency
+      - field: mom_pct
+        format: signed_percentage
+
   # ===========================================================================
   # COGS Unit Economics
   # ===========================================================================
@@ -432,6 +507,12 @@ slides:
     layout: title_only
     title: "Cost per 1M Analyzed Observations"
     bucket: "cost_per_1m_trend"
+    requires: unit_cost_data
+
+  - type: chart
+    layout: title_only
+    title: "Cost per 1M Analyzed Observations: Trend with COGS & Volume"
+    bucket: "cost_per_1m_combo"
     requires: unit_cost_data
 
   - type: table
@@ -492,6 +573,25 @@ slides:
     data_source: "data_platform_data.table_rows"
     month_labels_source: "data_platform_data.month_labels"
     totals_source: "data_platform_data.table_totals"
+    col_widths: [2.0, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.55, 1.55]
+    font_size: 13
+
+  # ===========================================================================
+  # Data Lake
+  # ===========================================================================
+
+  - type: transition
+    layout: transition
+    title: "Data Lake"
+    requires: data_lake_data
+
+  - type: history_table
+    layout: title_only
+    title: "Data Lake: Application Spend"
+    requires: data_lake_data
+    data_source: "data_lake_data.table_rows"
+    month_labels_source: "data_lake_data.month_labels"
+    totals_source: "data_lake_data.table_totals"
     col_widths: [2.0, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.55, 1.55]
     font_size: 13
 

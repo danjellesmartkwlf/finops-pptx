@@ -17,6 +17,7 @@ from pathlib import Path
 from src.app_data import (
     build_app_metrics,
     build_category_rollup,
+    build_data_lake_data,
     build_data_platform_data,
     build_dbx_breakdown_metrics,
     build_drilldown_metrics,
@@ -31,6 +32,7 @@ from src.calculations import calculate_all_buckets
 from src.charts import (
     build_all_trend_charts,
     build_cogs_stacked_bar,
+    build_cost_per_1m_combo,
     build_cost_per_1m_trend,
     build_pod_unit_cost_trend,
     build_trend_chart,
@@ -47,9 +49,12 @@ from src.ingestion import (
     fetch_cogs_drilldown,
     fetch_cylance_actuals,
     fetch_cylance_dbx_summary,
+    fetch_data_lake_history,
     fetch_dbx_awn_breakdown,
     fetch_dbx_awn_summary,
     fetch_ec2_purchase_breakdown,
+    fetch_other_app_by_eks_cluster,
+    fetch_other_app_by_service,
     fetch_unit_cost_data,
     load_config,
 )
@@ -337,6 +342,12 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
     else:
         data_platform_data = None
 
+    print("  Building Data Lake data ...")
+    data_lake_history = fetch_data_lake_history(month_num, year, num_months=lookback_months)
+    data_lake_data = build_data_lake_data(data_lake_history) or None
+    if data_lake_data:
+        print(f"    {len(data_lake_data['table_rows'])} Data Lake apps found")
+
     print("  Building executive summary table data ...")
     summary_data = _build_summary_table_data(actuals, month_num, year)
 
@@ -401,9 +412,30 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         "ec2_totals": ec2_totals,
     }
 
+    # 7b. 'other' app drill-down: by service and by EKS cluster
+    print("  Fetching 'other' app breakdown by service ...")
+    other_by_service_raw = fetch_other_app_by_service(month_num, year)
+    print(f"    Found {len(other_by_service_raw)} service rows")
+    other_by_service = build_dbx_breakdown_metrics(other_by_service_raw)
+    other_by_service_totals = compute_drilldown_totals(other_by_service)
+
+    print("  Fetching 'other' app breakdown by EKS cluster ...")
+    other_by_eks_raw = fetch_other_app_by_eks_cluster(month_num, year)
+    print(f"    Found {len(other_by_eks_raw)} EKS cluster rows")
+    other_by_eks = build_dbx_breakdown_metrics(other_by_eks_raw)
+    other_by_eks_totals = compute_drilldown_totals(other_by_eks)
+
+    other_app_data = {
+        "by_service": other_by_service,
+        "by_service_totals": other_by_service_totals,
+        "by_eks_cluster": other_by_eks,
+        "by_eks_cluster_totals": other_by_eks_totals,
+    }
+
     # 8. Unit cost data (COGS vs analyzed observations)
     print("  Fetching unit cost data ...")
-    unit_cost_data = fetch_unit_cost_data(month_num, year, num_months=lookback_months)
+    unit_cost_start = config.get("unit_cost_start_month")
+    unit_cost_data = fetch_unit_cost_data(month_num, year, num_months=lookback_months, start_month=unit_cost_start)
     print(f"    Org history: {len(unit_cost_data['org_history'])} months")
     print(f"    Pod MoM rows: {len(unit_cost_data['pod_mom'])}")
 
@@ -414,6 +446,9 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         )
         chart_images["cost_per_1m_trend"] = render_chart_png(
             build_cost_per_1m_trend(unit_cost_data["org_history"])
+        )
+        chart_images["cost_per_1m_combo"] = render_chart_png(
+            build_cost_per_1m_combo(unit_cost_data["org_history"])
         )
     if unit_cost_data["pod_history"]:
         chart_images["pod_unit_cost_trend"] = render_chart_png(
@@ -464,7 +499,9 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         data_platform_data=data_platform_data,
         dbx_data=dbx_data,
         dbx_summary_data=dbx_summary_data,
+        data_lake_data=data_lake_data,
         kpi_grid_data=kpi_grid_data,
+        other_app_data=other_app_data,
     )
 
     # 11. Write file

@@ -713,6 +713,165 @@ def _handle_kpi_grid(
 
 
 # ---------------------------------------------------------------------------
+# COGS Forecast Variance slide
+# ---------------------------------------------------------------------------
+
+def _fmt_variance_pct(var_change: float | None, forecast: float | None) -> str:
+    """Return variance % string, using 'n/m' when forecast is near zero."""
+    if var_change is None or forecast is None:
+        return "N/A"
+    if abs(forecast) < 500:
+        return "n/m"
+    pct = (var_change / forecast) * 100.0
+    sign = "+" if pct > 0 else ""
+    return f"{sign}{pct:.1f}%"
+
+
+def _handle_cogs_forecast_variance(
+    prs: Any,
+    slide_cfg: dict[str, Any],
+    layouts: dict[str, Any],
+    context: dict[str, Any],
+) -> None:
+    """Render COGS Forecast Variance slide grouped by category with subtotals.
+
+    Columns: Application/Category | Actual | Forecast | Variance ($) | Variance (%)
+    Orange = over forecast (unfavorable), green = under forecast (favorable).
+    Category subtotal rows are inserted after each category's apps.
+    """
+    if not _check_requires(slide_cfg.get("requires"), context):
+        return
+
+    app_metrics: list[dict] | None = _resolve_data_path("app_data.app_metrics", context)
+    app_totals: dict | None = _resolve_data_path("app_data.app_totals", context)
+    if not app_metrics:
+        return
+
+    fmt = context.get("fmt", {})
+    month = fmt.get("month", "")
+    year = fmt.get("year", "")
+    title = f"COGS Forecast Variance \u2014 {month} {year}"
+
+    layout = layouts.get(slide_cfg.get("layout", "title_only"))
+    if layout is None:
+        return
+
+    # Group apps by category (preserve descending-spend order within category)
+    from collections import defaultdict
+    category_apps: dict[str, list[dict]] = defaultdict(list)
+    for m in app_metrics:
+        category_apps[m["category"]].append(m)
+
+    # Sort categories by total current_month spend descending
+    category_order = sorted(
+        category_apps.keys(),
+        key=lambda c: sum(m["current_month"] for m in category_apps[c]),
+        reverse=True,
+    )
+
+    # Build flat row list: app rows + category subtotal row per category
+    TableRow = dict  # type alias for clarity
+    flat_rows: list[TableRow] = []
+    for cat in category_order:
+        apps = category_apps[cat]
+        for m in apps:
+            flat_rows.append({"_type": "app", **m})
+        # Category subtotal
+        cat_actual = sum(m["current_month"] for m in apps)
+        cat_forecast = sum(m["forecast"] for m in apps if m["forecast"] is not None)
+        cat_var = cat_actual - cat_forecast if any(m["forecast"] is not None for m in apps) else None
+        flat_rows.append({
+            "_type": "subtotal",
+            "app": f"{cat} Category Total",
+            "current_month": cat_actual,
+            "forecast": cat_forecast if any(m["forecast"] is not None for m in apps) else None,
+            "var_change": cat_var,
+        })
+
+    # Grand total row
+    grand_actual = app_totals["current_month"] if app_totals else sum(m["current_month"] for m in app_metrics)
+    grand_forecast = app_totals["forecast"] if app_totals else None
+    grand_var = app_totals["var_change"] if app_totals else None
+
+    font_size = slide_cfg.get("font_size", 16)
+    col_widths = slide_cfg.get("col_widths", [3.0, 2.3, 2.3, 2.3, 2.4])
+    headers = ["Application /\nCategory", f"{month} Actual", f"{month} Forecast", "Variance ($)", "Variance (%)"]
+
+    n_data_rows = len(flat_rows)
+    n_rows = 1 + n_data_rows + 1  # header + data + grand total
+
+    slide = prs.slides.add_slide(layout)
+    set_text_by_idx(slide, 0, title)
+
+    shape = slide.shapes.add_table(
+        n_rows, 5,
+        Inches(0.5), Inches(1.4), Inches(12.3),
+        Inches(min(0.32 * n_rows, 5.8)),
+    )
+    table = shape.table
+
+    tbl_pr = table._tbl.tblPr
+    tbl_pr.set("firstRow", "1")
+    tbl_pr.set("lastRow", "1")
+    tbl_pr.set("bandRow", "1")
+    tbl_pr.set("bandCol", "0")
+    tbl_pr.set("firstCol", "1")
+
+    for i, w in enumerate(col_widths):
+        table.columns[i].width = Inches(w)
+
+    # Header row
+    for col_idx, h in enumerate(headers):
+        align = PP_ALIGN.LEFT if col_idx == 0 else PP_ALIGN.RIGHT
+        set_cell(table.cell(0, col_idx), h, font_size=font_size, bold=True, alignment=align)
+
+    # Data rows
+    for row_idx, row in enumerate(flat_rows, start=1):
+        is_subtotal = row["_type"] == "subtotal"
+        var_change = row.get("var_change")
+        forecast = row.get("forecast")
+        actual = row.get("current_month", 0.0)
+
+        var_color = _COLOR_ORANGE if (var_change or 0) > 0 else _COLOR_GREEN
+        var_dollar_str = fmt_abbreviated_signed(var_change) if var_change is not None else "N/A"
+        var_pct_str = _fmt_variance_pct(var_change, forecast)
+
+        set_cell(
+            table.cell(row_idx, 0), row.get("app", ""),
+            font_size=font_size, bold=is_subtotal, alignment=PP_ALIGN.LEFT,
+        )
+        set_cell(
+            table.cell(row_idx, 1), fmt_abbreviated(actual),
+            font_size=font_size, bold=is_subtotal, alignment=PP_ALIGN.RIGHT,
+        )
+        set_cell(
+            table.cell(row_idx, 2), fmt_abbreviated(forecast) if forecast else "N/A",
+            font_size=font_size, bold=is_subtotal, alignment=PP_ALIGN.RIGHT,
+        )
+        set_cell(
+            table.cell(row_idx, 3), var_dollar_str,
+            font_size=font_size, bold=is_subtotal, alignment=PP_ALIGN.RIGHT,
+            color=var_color if var_change is not None else None,
+        )
+        set_cell(
+            table.cell(row_idx, 4), var_pct_str,
+            font_size=font_size, bold=is_subtotal, alignment=PP_ALIGN.RIGHT,
+            color=var_color if var_change is not None else None,
+        )
+
+    # Grand total row
+    grand_row_idx = 1 + n_data_rows
+    grand_var_color = _COLOR_ORANGE if (grand_var or 0) > 0 else _COLOR_GREEN
+    set_cell(table.cell(grand_row_idx, 0), "COGS Grand Total", font_size=font_size, bold=True, alignment=PP_ALIGN.LEFT)
+    set_cell(table.cell(grand_row_idx, 1), fmt_abbreviated(grand_actual), font_size=font_size, bold=True, alignment=PP_ALIGN.RIGHT)
+    set_cell(table.cell(grand_row_idx, 2), fmt_abbreviated(grand_forecast) if grand_forecast else "N/A", font_size=font_size, bold=True, alignment=PP_ALIGN.RIGHT)
+    set_cell(table.cell(grand_row_idx, 3), fmt_abbreviated_signed(grand_var) if grand_var is not None else "N/A", font_size=font_size, bold=True, alignment=PP_ALIGN.RIGHT, color=grand_var_color if grand_var is not None else None)
+    set_cell(table.cell(grand_row_idx, 4), _fmt_variance_pct(grand_var, grand_forecast), font_size=font_size, bold=True, alignment=PP_ALIGN.RIGHT, color=grand_var_color if grand_var is not None else None)
+
+    apply_table_style(table)
+
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 
@@ -726,6 +885,7 @@ _HANDLER_MAP: dict[str, Any] = {
     "summary_table": _handle_summary_table,
     "history_table": _handle_history_table,
     "kpi_grid": _handle_kpi_grid,
+    "cogs_forecast_variance": _handle_cogs_forecast_variance,
 }
 
 
@@ -763,7 +923,9 @@ def generate_pptx(
     data_platform_data: dict[str, Any] | None = None,
     dbx_data: dict[str, Any] | None = None,
     dbx_summary_data: dict[str, Any] | None = None,
+    data_lake_data: dict[str, Any] | None = None,
     kpi_grid_data: dict[str, Any] | None = None,
+    other_app_data: dict[str, Any] | None = None,
 ) -> bytes:
     """Build a PowerPoint deck from ``slides_config.yaml`` definitions.
 
@@ -822,7 +984,9 @@ def generate_pptx(
         "data_platform_data": data_platform_data,
         "dbx_data": dbx_data,
         "dbx_summary_data": dbx_summary_data,
+        "data_lake_data": data_lake_data,
         "kpi_grid_data": kpi_grid_data,
+        "other_app_data": other_app_data,
         "fmt": fmt,
         "prev_month": prev_month,
         "curr_month": curr_month,

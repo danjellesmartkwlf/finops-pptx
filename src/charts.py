@@ -600,6 +600,148 @@ def build_cost_per_1m_trend(
     return fig
 
 
+def build_cost_per_1m_combo(
+    org_history: list[dict[str, Any]],
+    *,
+    dark_mode: bool = True,
+) -> go.Figure:
+    """Combo chart: Cost/1M line (left) + COGS bars + Observed Obs line (right).
+
+    Lets the reader see the unit-cost trend alongside absolute COGS and volume
+    in one view, covering all available months (Nov 2025 onwards).
+
+    Args:
+        org_history: Chronological list from ``fetch_unit_cost_data()``.
+        dark_mode: Dark text/background styling.
+
+    Returns:
+        A Plotly Figure with dual y-axes.
+    """
+    import math
+    from plotly.subplots import make_subplots
+
+    months = [h["month_label"] for h in org_history]
+    unit_costs = [h["cogs_per_1m_analyzed"] for h in org_history]
+    cogs = [h["total_cogs"] for h in org_history]
+    obs_billions = [h["total_analyzed_obs"] / 1e9 for h in org_history]
+
+    text_color = "white" if dark_mode else "#333333"
+    bg_color = "rgba(0,0,0,0)" if dark_mode else "white"
+    grid_color = "rgba(255,255,255,0.12)" if dark_mode else "rgba(0,0,0,0.08)"
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # COGS bars on secondary y-axis (background context)
+    fig.add_trace(
+        go.Bar(
+            x=months,
+            y=cogs,
+            name="Total COGS ($)",
+            marker_color="rgba(0,153,255,0.35)",
+            text=[_fmt_abbreviated(v) for v in cogs],
+            textposition="outside",
+            textfont=dict(size=13, color=text_color),
+        ),
+        secondary_y=True,
+    )
+
+    # Analyzed Observations line on secondary y-axis
+    fig.add_trace(
+        go.Scatter(
+            x=months,
+            y=obs_billions,
+            name="Analyzed Obs (B)",
+            mode="lines+markers",
+            line=dict(color="#83D6FF", width=2, dash="dot"),
+            marker=dict(symbol="circle", size=8, color="#83D6FF"),
+        ),
+        secondary_y=True,
+    )
+
+    # Cost/1M line on primary y-axis (the headline metric)
+    fig.add_trace(
+        go.Scatter(
+            x=months,
+            y=unit_costs,
+            name="Cost / 1M Analyzed Obs ($)",
+            mode="lines+markers+text",
+            line=dict(color=ACTUAL_COLOR, width=3),
+            marker=dict(symbol="circle", size=12, color=ACTUAL_COLOR),
+            text=[f"${v:.2f}" for v in unit_costs],
+            textposition="top center",
+            textfont=dict(size=16, color=text_color),
+        ),
+        secondary_y=False,
+    )
+
+    # Primary y-axis ticks (Cost/1M)
+    if unit_costs:
+        y_min, y_max = min(unit_costs), max(unit_costs)
+        y_range = y_max - y_min if y_max != y_min else y_max
+        pad = y_range * 0.25 if y_range else y_max * 0.25
+        tick_lo = max(0, y_min - pad)
+        tick_hi = y_max + pad
+        raw_step = (tick_hi - tick_lo) / 5
+        magnitude = 10 ** math.floor(math.log10(raw_step)) if raw_step > 0 else 0.01
+        step = math.ceil(raw_step / magnitude) * magnitude
+        tick_start = math.floor(tick_lo / step) * step if step > 0 else 0
+        y_tickvals: list[float] = []
+        v = tick_start
+        while v <= tick_hi + step:
+            if v >= 0:
+                y_tickvals.append(round(v, 4))
+            v += step
+    else:
+        y_tickvals = []
+    y_ticktext = [f"${v:.2f}" for v in y_tickvals]
+
+    fig.update_layout(
+        title=None,
+        barmode="group",
+        bargap=0.25,
+        xaxis=dict(
+            title="",
+            tickfont=dict(size=18, color=text_color),
+            showgrid=False,
+        ),
+        legend=dict(
+            font=dict(size=14, color=text_color),
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+        ),
+        paper_bgcolor=bg_color,
+        plot_bgcolor=bg_color,
+        margin=dict(t=50, b=40, l=110, r=110),
+        width=1200,
+        height=560,
+    )
+
+    fig.update_yaxes(
+        title=dict(text="Cost per 1M Analyzed Obs ($)", font=dict(size=15, color=text_color)),
+        tickmode="array",
+        tickvals=y_tickvals,
+        ticktext=y_ticktext,
+        tickfont=dict(size=13, color=text_color),
+        gridcolor=grid_color,
+        secondary_y=False,
+    )
+
+    cogs_max = max(cogs) if cogs else 0
+    fig.update_yaxes(
+        title=dict(text="COGS ($) / Analyzed Obs (B)", font=dict(size=15, color=text_color)),
+        tickformat="$,.0f",
+        tickfont=dict(size=13, color=text_color),
+        showgrid=False,
+        secondary_y=True,
+        range=[0, cogs_max * 1.5],
+    )
+
+    return fig
+
+
 def build_pod_unit_cost_trend(
     pod_history: list[dict[str, Any]],
     *,

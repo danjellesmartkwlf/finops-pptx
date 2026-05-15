@@ -754,6 +754,202 @@ ORDER BY ABS(delta_cost) DESC
     return results
 
 
+def fetch_other_app_by_service(
+    month: str,
+    year: int,
+    top_n: int = 6,
+    config_path: str = "config.yaml",
+) -> list[dict[str, Any]]:
+    """Fetch current/previous month COGS for awn_app='other' grouped by product_name.
+
+    Ranked by ABS(delta_cost) to show top MoM drivers.
+
+    Args:
+        month: Two-digit month string for the reporting month.
+        year: Four-digit reporting year.
+        top_n: Maximum rows before collapsing into "All Other".
+        config_path: Path to the YAML config file.
+
+    Returns:
+        A list of dicts sorted by ABS(delta_cost) DESC, each with:
+            - ``dimension_value``, ``current_month``, ``previous_month``,
+              ``delta_cost``
+    """
+    config = load_config(config_path)
+    dd_cfg = config.get("drilldown", {})
+    source = dd_cfg.get("source", {})
+    table = source.get("table", "public.daily_cur_summary")
+    cost_column = source.get("cost_column", "cogs_adjusted_cost")
+    date_column = source.get("date_column", "usage_date")
+    filters: list[str] = source.get("filters", [])
+
+    prev_month, prev_year = _previous_month(month, year)
+    curr_filter = _build_month_filter(date_column, month, year)
+    prev_filter = _build_month_filter(date_column, prev_month, prev_year)
+
+    combined_month = f"({curr_filter} OR {prev_filter})"
+    where_parts = [combined_month, "COALESCE(awn_app, 'other') = 'other'"] + list(filters)
+    where_clause = " AND ".join(where_parts)
+
+    sql = f"""
+WITH grouped AS (
+    SELECT
+        COALESCE(product_name, 'Unknown') AS dimension_value,
+        SUM(CASE WHEN {curr_filter} THEN {cost_column} ELSE 0 END) AS current_month,
+        SUM(CASE WHEN {prev_filter} THEN {cost_column} ELSE 0 END) AS previous_month
+    FROM {table}
+    WHERE {where_clause}
+    GROUP BY 1
+),
+with_delta AS (
+    SELECT *,
+        current_month - previous_month AS delta_cost
+    FROM grouped
+    WHERE current_month > 0 OR previous_month > 0
+),
+ranked AS (
+    SELECT *,
+        ROW_NUMBER() OVER (ORDER BY ABS(current_month - previous_month) DESC) AS rn
+    FROM with_delta
+),
+combined AS (
+    SELECT dimension_value, current_month, previous_month, delta_cost
+    FROM ranked WHERE rn <= {top_n}
+
+    UNION ALL
+
+    SELECT
+        'All Other' AS dimension_value,
+        SUM(current_month) AS current_month,
+        SUM(previous_month) AS previous_month,
+        SUM(delta_cost) AS delta_cost
+    FROM ranked WHERE rn > {top_n}
+    HAVING COUNT(*) > 0
+)
+SELECT dimension_value, current_month, previous_month, delta_cost
+FROM combined
+ORDER BY ABS(delta_cost) DESC
+"""
+
+    logger.debug("Other app by-service SQL:\n%s", sql)
+    conn = get_shared_connection()
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        rows = cur.fetchall()
+
+    results: list[dict[str, Any]] = []
+    for row in rows:
+        results.append({
+            "dimension_value": str(row[0]) if row[0] else "Unknown",
+            "current_month": float(row[1]) if row[1] is not None else 0.0,
+            "previous_month": float(row[2]) if row[2] is not None else 0.0,
+            "delta_cost": float(row[3]) if row[3] is not None else 0.0,
+        })
+
+    logger.info("Fetched %d other-app by-service rows", len(results))
+    return results
+
+
+def fetch_other_app_by_eks_cluster(
+    month: str,
+    year: int,
+    top_n: int = 6,
+    config_path: str = "config.yaml",
+) -> list[dict[str, Any]]:
+    """Fetch current/previous month COGS for awn_app='other' grouped by tag_eks_cluster_name.
+
+    Only rows where tag_eks_cluster_name IS NOT NULL are included.
+    Ranked by ABS(delta_cost) to show top MoM drivers.
+
+    Args:
+        month: Two-digit month string for the reporting month.
+        year: Four-digit reporting year.
+        top_n: Maximum rows before collapsing into "All Other".
+        config_path: Path to the YAML config file.
+
+    Returns:
+        A list of dicts sorted by ABS(delta_cost) DESC, each with:
+            - ``dimension_value``, ``current_month``, ``previous_month``,
+              ``delta_cost``
+    """
+    config = load_config(config_path)
+    dd_cfg = config.get("drilldown", {})
+    source = dd_cfg.get("source", {})
+    table = source.get("table", "public.daily_cur_summary")
+    cost_column = source.get("cost_column", "cogs_adjusted_cost")
+    date_column = source.get("date_column", "usage_date")
+    filters: list[str] = source.get("filters", [])
+
+    prev_month, prev_year = _previous_month(month, year)
+    curr_filter = _build_month_filter(date_column, month, year)
+    prev_filter = _build_month_filter(date_column, prev_month, prev_year)
+
+    combined_month = f"({curr_filter} OR {prev_filter})"
+    where_parts = (
+        [combined_month, "COALESCE(awn_app, 'other') = 'other'", "tag_eks_cluster_name IS NOT NULL"]
+        + list(filters)
+    )
+    where_clause = " AND ".join(where_parts)
+
+    sql = f"""
+WITH grouped AS (
+    SELECT
+        tag_eks_cluster_name AS dimension_value,
+        SUM(CASE WHEN {curr_filter} THEN {cost_column} ELSE 0 END) AS current_month,
+        SUM(CASE WHEN {prev_filter} THEN {cost_column} ELSE 0 END) AS previous_month
+    FROM {table}
+    WHERE {where_clause}
+    GROUP BY 1
+),
+with_delta AS (
+    SELECT *,
+        current_month - previous_month AS delta_cost
+    FROM grouped
+    WHERE current_month > 0 OR previous_month > 0
+),
+ranked AS (
+    SELECT *,
+        ROW_NUMBER() OVER (ORDER BY ABS(current_month - previous_month) DESC) AS rn
+    FROM with_delta
+),
+combined AS (
+    SELECT dimension_value, current_month, previous_month, delta_cost
+    FROM ranked WHERE rn <= {top_n}
+
+    UNION ALL
+
+    SELECT
+        'All Other' AS dimension_value,
+        SUM(current_month) AS current_month,
+        SUM(previous_month) AS previous_month,
+        SUM(delta_cost) AS delta_cost
+    FROM ranked WHERE rn > {top_n}
+    HAVING COUNT(*) > 0
+)
+SELECT dimension_value, current_month, previous_month, delta_cost
+FROM combined
+ORDER BY ABS(delta_cost) DESC
+"""
+
+    logger.debug("Other app by-EKS-cluster SQL:\n%s", sql)
+    conn = get_shared_connection()
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        rows = cur.fetchall()
+
+    results: list[dict[str, Any]] = []
+    for row in rows:
+        results.append({
+            "dimension_value": str(row[0]) if row[0] else "Unknown",
+            "current_month": float(row[1]) if row[1] is not None else 0.0,
+            "previous_month": float(row[2]) if row[2] is not None else 0.0,
+            "delta_cost": float(row[3]) if row[3] is not None else 0.0,
+        })
+
+    logger.info("Fetched %d other-app by-EKS-cluster rows", len(results))
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Historical data (6-month trend)
 # ---------------------------------------------------------------------------
@@ -908,6 +1104,7 @@ def fetch_unit_cost_data(
     month: str,
     year: int,
     num_months: int = 5,
+    start_month: str | None = None,
 ) -> dict[str, Any]:
     """Fetch unit cost data from public_bronze.v_pod_monthly_unit_costs.
 
@@ -919,6 +1116,8 @@ def fetch_unit_cost_data(
         month: Two-digit month string for the reporting month.
         year: Four-digit reporting year.
         num_months: Number of months of history.
+        start_month: Optional floor in "YYYY-MM" format. Months before this
+            date are dropped from the history even if within num_months.
 
     Returns:
         Dict with keys:
@@ -934,6 +1133,10 @@ def fetch_unit_cost_data(
     from collections import defaultdict
 
     months = _walk_back_months(month, year, num_months)
+
+    if start_month:
+        floor_y, floor_m = int(start_month[:4]), int(start_month[5:7])
+        months = [(m, y) for m, y in months if (y, int(m)) >= (floor_y, floor_m)]
 
     # Build month-label lookup: "YYYY-MM-01" -> "Jan 2026"
     label_lookup: dict[str, str] = {}
@@ -976,15 +1179,34 @@ def fetch_unit_cost_data(
             "cogs_per_1m_analyzed": cogs_per_1m,
         }
 
+    # Fetch true org-level COGS from daily_cur_summary (includes 'Other'/unassigned pods
+    # that are excluded from the view's pod join)
+    org_cogs_sql = f"""
+        SELECT
+            DATE_TRUNC('month', usage_date) AS month,
+            SUM(cogs_adjusted_cost) AS total_cogs
+        FROM daily_cur_summary
+        WHERE DATE_TRUNC('month', usage_date) IN ({date_literals})
+        GROUP BY DATE_TRUNC('month', usage_date)
+    """
+    with conn.cursor() as cur:
+        cur.execute(org_cogs_sql)
+        org_cogs_rows = cur.fetchall()
+
+    org_cogs_by_date: dict[str, float] = {}
+    for row in org_cogs_rows:
+        date_val = row[0]
+        dk = date_val.strftime("%Y-%m-%d") if hasattr(date_val, "strftime") else str(date_val)[:10]
+        org_cogs_by_date[dk] = float(row[1]) if row[1] is not None else 0.0
+
     # Org-level aggregation per month
     org_history: list[dict[str, Any]] = []
     for m_str, y in months:
         date_key = f"{y}-{m_str}-01"
-        total_cogs = 0.0
+        total_cogs = org_cogs_by_date.get(date_key, 0.0)
         total_obs = 0
         for pd in pod_month_data.values():
             if date_key in pd:
-                total_cogs += pd[date_key]["awn_cogs"]
                 total_obs += pd[date_key]["total_analyzed_obs"]
         cogs_per_1m = (total_cogs / (total_obs / 1_000_000)) if total_obs > 0 else 0.0
         org_history.append({
@@ -1357,4 +1579,90 @@ def fetch_app_cogs_history(
         })
 
     logger.info("Fetched %d app COGS history rows", len(results))
+    return results
+
+
+_DATA_LAKE_AWS_APPS = ("normalizer", "dbx-ingest-s3", "dbx-ingest-ec2")
+
+
+def fetch_data_lake_history(
+    month: str,
+    year: int,
+    num_months: int = 6,
+    config_path: str = "config.yaml",
+) -> list[dict[str, Any]]:
+    """Fetch multi-month COGS history for Data Lake apps (AWS + Databricks total).
+
+    Returns rows with the same shape as ``fetch_app_cogs_history``:
+        - ``app_name``: one of the three AWS app names or ``"AWN Databricks"``.
+        - ``month_label``: human-readable label (e.g. ``"Jan 2026"``).
+        - ``monthly_cost``: total cost for that app/month.
+    """
+    config = load_config(config_path)
+
+    cogs_bucket = next(
+        (b for b in config.get("buckets", []) if b["name"] == "COGS"), None
+    )
+    if cogs_bucket is None:
+        raise ValueError("No 'COGS' bucket found in config.")
+
+    source = cogs_bucket["sources"][0]
+    table = source["table"]
+    cost_column = source["cost_column"]
+    date_column = source["date_column"]
+    filters: list[str] = source.get("filters", [])
+
+    months = _walk_back_months(month, year, num_months)
+    label_lookup: dict[str, str] = {}
+    for m_str, y in months:
+        m_int = int(m_str)
+        abbr = calendar.month_abbr[m_int]
+        label_lookup[f"{y}-{m_str}-01"] = f"{abbr} {y}"
+
+    date_literals = ", ".join(f"'{y}-{m}-01'" for m, y in months)
+    month_clause = f"DATE_TRUNC('month', {date_column}) IN ({date_literals})"
+    app_list = ", ".join(f"'{a}'" for a in _DATA_LAKE_AWS_APPS)
+    where_parts = [month_clause, f"awn_app IN ({app_list})"] + list(filters)
+    where_clause = " AND ".join(where_parts)
+
+    aws_sql = (
+        f"SELECT awn_app AS app_name, "
+        f"DATE_TRUNC('month', {date_column}) AS month_start, "
+        f"COALESCE(SUM({cost_column}), 0) AS monthly_cost "
+        f"FROM {table} "
+        f"WHERE {where_clause} "
+        f"GROUP BY 1, 2 "
+        f"ORDER BY app_name, month_start"
+    )
+
+    cogs_expr = _build_dbx_cogs_cost_expr()
+    dbx_date_literals = ", ".join(f"'{y}-{m}-01'" for m, y in months)
+    dbx_sql = (
+        f"SELECT 'AWN Databricks' AS app_name, "
+        f"DATE_TRUNC('month', usage_start_time) AS month_start, "
+        f"COALESCE(SUM({cogs_expr}), 0) AS monthly_cost "
+        f"FROM public.dbx_cur "
+        f"WHERE organization = 'Arctic Wolf' "
+        f"  AND DATE_TRUNC('month', usage_start_time) IN ({dbx_date_literals}) "
+        f"GROUP BY 1, 2 "
+        f"ORDER BY month_start"
+    )
+
+    conn = get_shared_connection()
+    results: list[dict[str, Any]] = []
+    for sql in (aws_sql, dbx_sql):
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            for row in cur.fetchall():
+                app_name = str(row[0]) if row[0] else "Untagged"
+                date_val = row[1]
+                cost_val = float(row[2]) if row[2] is not None else 0.0
+                date_key = date_val.strftime("%Y-%m-%d") if hasattr(date_val, "strftime") else str(date_val)[:10]
+                results.append({
+                    "app_name": app_name,
+                    "month_label": label_lookup.get(date_key, date_key),
+                    "monthly_cost": cost_val,
+                })
+
+    logger.info("Fetched %d data lake history rows", len(results))
     return results

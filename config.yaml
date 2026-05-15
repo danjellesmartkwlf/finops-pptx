@@ -5,7 +5,8 @@
 # ---------------------------------------------------------------------------
 # Global settings
 # ---------------------------------------------------------------------------
-lookback_months: 5   # Number of historical months shown on trend charts/tables
+lookback_months: 6   # Number of historical months shown on trend charts/tables
+unit_cost_start_month: "2025-11"  # Earliest month shown on unit cost charts (inclusive)
 
 # ---------------------------------------------------------------------------
 # Redshift table definitions

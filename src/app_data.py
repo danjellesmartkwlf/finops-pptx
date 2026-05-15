@@ -596,3 +596,18 @@ def compute_drilldown_totals(
         "delta_cost": total_delta,
         "mom_pct": mom_pct,
     }
+
+
+# ---------------------------------------------------------------------------
+# Data Lake drill-down
+# ---------------------------------------------------------------------------
+
+def build_data_lake_data(
+    app_history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build Data Lake table data from app-level history.
+
+    Accepts rows from ``fetch_data_lake_history()`` (AWS apps + AWN Databricks).
+    Returns the same shape as ``build_data_platform_data``.
+    """
+    return build_data_platform_data(app_history)

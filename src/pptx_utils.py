@@ -234,13 +234,12 @@ def fmt_abbreviated(
     else:
         prefix = "-" if value < 0 else ""
     dec = "0" if whole else "2"
-    dec_k = "0" if whole else "1"
     if abs_val >= 1_000_000_000:
         return f"{prefix}${abs_val / 1_000_000_000:.{dec}f}B"
     if abs_val >= 1_000_000:
         return f"{prefix}${abs_val / 1_000_000:.{dec}f}M"
     if abs_val >= 1_000:
-        return f"{prefix}${abs_val / 1_000:.{dec_k}f}K"
+        return f"{prefix}${abs_val / 1_000:.0f}K"
     return f"{prefix}${abs_val:,.0f}"
 
 
