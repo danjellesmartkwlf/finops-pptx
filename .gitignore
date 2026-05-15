@@ -17,6 +17,23 @@ wheels/
 
 # MCP config (contains credentials)
 .mcp.json
+
+# Generated output
 output/
+
+# Data files (Excel forecasts, mappings)
 data/
+
+# PowerPoint template (binary, too large for git)
 pptx_template/
+
+# Editor / IDE
+.vscode/
+
+# AI tool configs (personal)
+.claude/
+.opencode/
+.kiro/
+
+# Test / cache
+.pytest_cache/
