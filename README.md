@@ -28,8 +28,9 @@ Automates the monthly executive cloud cost presentation for Arctic Wolf. Replace
 ```
 config.yaml                # Bucket definitions, SQL logic, templates, file paths
 slides_config.yaml         # Slide sequence and layout definitions
-generate_report.py         # CLI entry point (defaults to previous month)
+generate_report.py         # CLI entry point — slim orchestrator calling phase functions
 Makefile                   # Dev shortcuts (make report, make check-db, etc.)
+CHANGELOG.md               # Version history
 src/
   ingestion.py             # Redshift connection and data loading
   forecast.py              # Excel forecast ingestion and validation
