@@ -244,26 +244,33 @@ def _merge_history(
     return merged
 
 
-def main(month_name: str, year: int, output_path: str | None) -> None:
-    config = load_config("config.yaml")
-    buckets = config["buckets"]
-    lookback_months = config.get("lookback_months", 6)
-    month_num = _month_name_to_number(month_name)
-    month_label = f"{month_name} {year}"
-
-    if output_path is None:
-        safe = month_label.replace(" ", "_").lower()
-        output_path = f"output/finops_report_{safe}.pptx"
-
-    print(f"Generating report for {month_label} ...")
-
-    # 1. Actuals
+def _fetch_actuals(month_num: str, year: int) -> tuple[dict, dict, dict, dict]:
+    """Fetch bucket, Cylance, and Databricks actuals from Redshift."""
     print("  Fetching actuals from Redshift ...")
     actuals = fetch_bucket_actuals(month_num, year)
     for name, vals in actuals.items():
         print(f"    {name}: ${vals['current_month']:,.2f} current / ${vals['previous_month']:,.2f} previous")
 
-    # 2. Forecasts
+    print("  Fetching Cylance actuals from Redshift ...")
+    cylance_actuals = fetch_cylance_actuals(month_num, year)
+    for name, vals in cylance_actuals.items():
+        print(f"    Cylance {name}: ${vals['current_month']:,.2f} current / ${vals['previous_month']:,.2f} previous")
+
+    print("  Fetching Cylance Databricks spend ...")
+    cylance_dbx = fetch_cylance_dbx_summary(month_num, year)
+    for name, vals in cylance_dbx.items():
+        print(f"    Cylance DBX {name}: ${vals['current_month']:,.2f} current / ${vals['previous_month']:,.2f} previous")
+
+    print("  Fetching AWN Databricks spend ...")
+    dbx_summary = fetch_dbx_awn_summary(month_num, year)
+    for name, vals in dbx_summary.items():
+        print(f"    DBX {name}: ${vals['current_month']:,.2f} current / ${vals['previous_month']:,.2f} previous")
+
+    return actuals, cylance_actuals, cylance_dbx, dbx_summary
+
+
+def _load_forecasts(config: dict, month_name: str, year: int, buckets: list[dict]) -> tuple[dict, dict]:
+    """Load bucket-level and app-level forecasts from Excel."""
     print("  Loading forecasts ...")
     try:
         forecasts = load_forecast(config, month_name, year)
@@ -271,15 +278,29 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         print("    Forecast file not found -- continuing without forecast data.")
         forecasts = {b["forecast_mapping_key"]: None for b in buckets}
 
-    # 3. Metrics
+    print("  Loading app-level forecasts ...")
+    app_forecasts = load_app_forecasts(config, month_name, year)
+    print(f"    Loaded forecasts for {len(app_forecasts)} apps")
+
+    return forecasts, app_forecasts
+
+
+def _build_metrics_and_narratives(
+    actuals: dict, forecasts: dict, buckets: list[dict], month_label: str, config: dict
+) -> tuple[dict, dict]:
+    """Calculate variance metrics and generate narrative text."""
     print("  Calculating metrics ...")
     all_metrics = calculate_all_buckets(actuals, forecasts, buckets)
 
-    # 4. Narratives
     print("  Generating narratives ...")
     narratives = generate_all_narratives(all_metrics, month_label, config)
 
-    # 5. History + charts
+    return all_metrics, narratives
+
+def _build_history_and_charts(
+    config: dict, month_name: str, month_num: str, year: int, buckets: list[dict], lookback_months: int
+) -> tuple[dict, list[dict]]:
+    """Fetch history, build trend charts, and COGS stacked bar. Returns chart_images and app_cogs_history."""
     print(f"  Fetching {lookback_months}-month history ...")
     actuals_history = fetch_bucket_history(month_num, year, num_months=lookback_months)
 
@@ -296,7 +317,6 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
     sections = config.get("pptx", {}).get("sections", [])
     chart_images = build_all_trend_charts(chart_data, sections)
 
-    # COGS stacked bar chart (per-app breakdown)
     print(f"  Fetching app-level COGS history ({lookback_months} months) ...")
     app_cogs_history = fetch_app_cogs_history(month_num, year, num_months=lookback_months)
     print(f"    Found {len(app_cogs_history)} app-month records")
@@ -306,15 +326,26 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         cogs_bar_fig = build_cogs_stacked_bar(app_cogs_history)
         chart_images["COGS_app_breakdown"] = render_chart_png(cogs_bar_fig)
 
-    # 6. Phase 2: App-level COGS breakdown
-    # (app_category_map loaded below; Data Platform charts built after it)
+    return chart_images, app_cogs_history
+
+
+def _build_app_level_data(
+    config: dict,
+    month_num: str,
+    year: int,
+    lookback_months: int,
+    actuals: dict,
+    cylance_actuals: dict,
+    cylance_dbx: dict,
+    dbx_summary: dict,
+    app_forecasts: dict,
+    app_cogs_history: list[dict],
+    chart_images: dict,
+) -> tuple[dict, dict, dict, dict, dict, dict | None, dict | None]:
+    """Build app-level metrics, summaries, KPI grid, data platform, and data lake data."""
     print("  Fetching app-level COGS actuals ...")
     app_actuals = fetch_app_actuals(month_num, year)
     print(f"    Found {len(app_actuals)} apps")
-
-    print("  Loading app-level forecasts ...")
-    app_forecasts = load_app_forecasts(config, month_name, year)
-    print(f"    Loaded forecasts for {len(app_forecasts)} apps")
 
     print("  Loading app category mapping ...")
     app_category_map = load_app_category_mapping(config)
@@ -348,26 +379,11 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
     if data_lake_data:
         print(f"    {len(data_lake_data['table_rows'])} Data Lake apps found")
 
+    # Summary tables
     print("  Building executive summary table data ...")
     summary_data = _build_summary_table_data(actuals, month_num, year)
-
-    print("  Fetching Cylance actuals from Redshift ...")
-    cylance_actuals = fetch_cylance_actuals(month_num, year)
-    for name, vals in cylance_actuals.items():
-        print(f"    Cylance {name}: ${vals['current_month']:,.2f} current / ${vals['previous_month']:,.2f} previous")
     cylance_summary_data = _build_summary_table_data(cylance_actuals, month_num, year)
-
-    print("  Fetching Cylance Databricks spend ...")
-    cylance_dbx = fetch_cylance_dbx_summary(month_num, year)
-    for name, vals in cylance_dbx.items():
-        print(f"    Cylance DBX {name}: ${vals['current_month']:,.2f} current / ${vals['previous_month']:,.2f} previous")
-
     cylance_dbx_summary_data = _build_summary_table_data(cylance_dbx, month_num, year)
-
-    print("  Fetching AWN Databricks spend ...")
-    dbx_summary = fetch_dbx_awn_summary(month_num, year)
-    for name, vals in dbx_summary.items():
-        print(f"    DBX {name}: ${vals['current_month']:,.2f} current / ${vals['previous_month']:,.2f} previous")
     dbx_summary_data = _build_summary_table_data(dbx_summary, month_num, year)
 
     print("  Building KPI grid data ...")
@@ -390,7 +406,18 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         "category_totals": category_totals,
     }
 
-    # 7. Phase 3: COGS drill-down
+    summaries = {
+        "summary_data": summary_data,
+        "cylance_summary_data": cylance_summary_data,
+        "cylance_dbx_summary_data": cylance_dbx_summary_data,
+        "dbx_summary_data": dbx_summary_data,
+        "kpi_grid_data": kpi_grid_data,
+    }
+
+    return app_data, summaries, data_platform_data, data_lake_data
+
+def _build_drilldowns(month_num: str, year: int) -> tuple[dict, dict]:
+    """Fetch COGS drilldown, EC2 breakdown, and 'other' app breakdowns."""
     print("  Fetching COGS drill-down data ...")
     drilldown_raw = fetch_cogs_drilldown(month_num, year)
     print(f"    Found {len(drilldown_raw)} drill-down rows")
@@ -405,14 +432,14 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
     ec2_metrics = build_ec2_purchase_metrics(ec2_raw)
     ec2_totals = compute_drilldown_totals(ec2_metrics)
 
-    app_data["drilldown"] = {
+    drilldown_data = {
         "drilldown_metrics": drilldown_metrics,
         "drilldown_totals": drilldown_totals,
         "ec2_metrics": ec2_metrics,
         "ec2_totals": ec2_totals,
     }
 
-    # 7b. 'other' app drill-down: by service and by EKS cluster
+    # 'other' app drill-down: by service and by EKS cluster
     print("  Fetching 'other' app breakdown by service ...")
     other_by_service_raw = fetch_other_app_by_service(month_num, year)
     print(f"    Found {len(other_by_service_raw)} service rows")
@@ -432,7 +459,12 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         "by_eks_cluster_totals": other_by_eks_totals,
     }
 
-    # 8. Unit cost data (COGS vs analyzed observations)
+    return drilldown_data, other_app_data
+
+def _build_unit_cost_charts(
+    config: dict, month_num: str, year: int, lookback_months: int, chart_images: dict
+) -> dict:
+    """Fetch unit cost data and render associated charts."""
     print("  Fetching unit cost data ...")
     unit_cost_start = config.get("unit_cost_start_month")
     unit_cost_data = fetch_unit_cost_data(month_num, year, num_months=lookback_months, start_month=unit_cost_start)
@@ -455,7 +487,10 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
             build_pod_unit_cost_trend(unit_cost_data["pod_history"])
         )
 
-    # 9. AWN Databricks breakdowns (summary already fetched above)
+    return unit_cost_data
+
+def _build_dbx_breakdowns(month_num: str, year: int) -> dict:
+    """Fetch AWN Databricks breakdowns by workspace and SKU."""
     print("  Fetching AWN Databricks breakdowns ...")
     dbx_cogs_by_workspace = build_dbx_breakdown_metrics(
         fetch_dbx_awn_breakdown(month_num, year, "workspace_name", "cogs")
@@ -470,7 +505,10 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         fetch_dbx_awn_breakdown(month_num, year, "sku_name", "opex")
     )
 
-    dbx_data = {
+    print(f"    COGS workspaces: {len(dbx_cogs_by_workspace)}, SKUs: {len(dbx_cogs_by_sku)}")
+    print(f"    OpEx workspaces: {len(dbx_opex_by_workspace)}, SKUs: {len(dbx_opex_by_sku)}")
+
+    return {
         "cogs_by_workspace": dbx_cogs_by_workspace,
         "cogs_by_workspace_totals": compute_drilldown_totals(dbx_cogs_by_workspace),
         "cogs_by_sku": dbx_cogs_by_sku,
@@ -480,10 +518,38 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         "opex_by_sku": dbx_opex_by_sku,
         "opex_by_sku_totals": compute_drilldown_totals(dbx_opex_by_sku),
     }
-    print(f"    COGS workspaces: {len(dbx_cogs_by_workspace)}, SKUs: {len(dbx_cogs_by_sku)}")
-    print(f"    OpEx workspaces: {len(dbx_opex_by_workspace)}, SKUs: {len(dbx_opex_by_sku)}")
 
-    # 10. Build PPTX
+
+def main(month_name: str, year: int, output_path: str | None) -> None:
+    config = load_config("config.yaml")
+    buckets = config["buckets"]
+    lookback_months = config.get("lookback_months", 6)
+    month_num = _month_name_to_number(month_name)
+    month_label = f"{month_name} {year}"
+
+    if output_path is None:
+        safe = month_label.replace(" ", "_").lower()
+        output_path = f"output/finops_report_{safe}.pptx"
+
+    print(f"Generating report for {month_label} ...")
+
+    actuals, cylance_actuals, cylance_dbx, dbx_summary = _fetch_actuals(month_num, year)
+    forecasts, app_forecasts = _load_forecasts(config, month_name, year, buckets)
+    all_metrics, narratives = _build_metrics_and_narratives(actuals, forecasts, buckets, month_label, config)
+    chart_images, app_cogs_history = _build_history_and_charts(config, month_name, month_num, year, buckets, lookback_months)
+
+    app_data, summaries, data_platform_data, data_lake_data = _build_app_level_data(
+        config, month_num, year, lookback_months,
+        actuals, cylance_actuals, cylance_dbx, dbx_summary,
+        app_forecasts, app_cogs_history, chart_images,
+    )
+
+    drilldown_data, other_app_data = _build_drilldowns(month_num, year)
+    app_data["drilldown"] = drilldown_data
+
+    unit_cost_data = _build_unit_cost_charts(config, month_num, year, lookback_months, chart_images)
+    dbx_data = _build_dbx_breakdowns(month_num, year)
+
     print("  Building PowerPoint ...")
     pptx_bytes = generate_pptx(
         narratives,
@@ -492,19 +558,18 @@ def main(month_name: str, year: int, output_path: str | None) -> None:
         month_label=month_label,
         chart_images=chart_images,
         app_data=app_data,
-        summary_data=summary_data,
-        cylance_summary_data=cylance_summary_data,
-        cylance_dbx_summary_data=cylance_dbx_summary_data,
+        summary_data=summaries["summary_data"],
+        cylance_summary_data=summaries["cylance_summary_data"],
+        cylance_dbx_summary_data=summaries["cylance_dbx_summary_data"],
         unit_cost_data=unit_cost_data,
         data_platform_data=data_platform_data,
         dbx_data=dbx_data,
-        dbx_summary_data=dbx_summary_data,
+        dbx_summary_data=summaries["dbx_summary_data"],
         data_lake_data=data_lake_data,
-        kpi_grid_data=kpi_grid_data,
+        kpi_grid_data=summaries["kpi_grid_data"],
         other_app_data=other_app_data,
     )
 
-    # 11. Write file
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(pptx_bytes)
