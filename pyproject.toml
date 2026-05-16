@@ -1,7 +1,7 @@
 [project]
-name = "streamdeck"
+name = "finops-report-generator"
 version = "0.2.0"
-description = "Add your description here"
+description = "Automated monthly executive cloud cost presentation generator"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -299,7 +299,7 @@ else:
     from src.pptx_gen import generate_pptx
 ```
 
-This allows A/B comparison during development. The env var is only for internal testing; do not expose it in the Streamlit UI.
+This allows A/B comparison during development. The env var is only for internal testing.
 
 **Phase 2 (Fidelity Verified):** After binary-identical output is confirmed (Task #5), change the import to point to v2 and delete the env var branching:
 

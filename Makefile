@@ -3,8 +3,8 @@
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-run: ## Launch the Streamlit UI
-	uv run streamlit run app.py
+run: ## Generate PPTX report (alias for `make report`)
+	@$(MAKE) report
 
 PREV_MONTH := $(shell date -v-1m +%B)
 PREV_YEAR  := $(shell date -v-1m +%Y)
@@ -20,7 +20,7 @@ sync: ## Install/sync dependencies
 	uv sync
 
 clean: ## Remove output files and Python cache
-	rm -rf output/*.pptx __pycache__ src/__pycache__ .streamlit
+	rm -rf output/*.pptx __pycache__ src/__pycache__
 
 inspect-template: ## Show PowerPoint template structure
 	uv run python -c "from src.pptx_gen import inspect_template; import json; print(json.dumps(inspect_template('pptx_template/template1.pptx'), indent=2, default=str))"
